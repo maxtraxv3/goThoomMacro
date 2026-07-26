@@ -1,0 +1,222 @@
+//ranger macro for new defaults.
+SETGLOBAL Rck 1
+
+SETGLOBAL FirstMorphName "Giant Carnivorous Plankton"
+SETGLOBAL SecondMorphName "Young Sasquatch"
+
+//dont change this
+SETGLOBAL speeding 0
+SETGLOBAL isMorphed 0
+SETGLOBAL whatShape 0
+SETGLOBAL swaobackL ""
+
+"/ranger"
+{
+message "F1 = First morph (toggle-able)"
+pause 1
+message "F2 = second morph (toggle-able)"
+pause 1
+message "F3 = HeartWood Charm (toggle-able)"
+pause 1
+message "F4 = Shield Stone (toggle-able)"
+pause 1
+message "F5 = Befriend"
+pause 1
+message "F6 = Control Befriend'ed"
+pause 1
+message "F7 = Dismiss Friend"
+pause 1
+message "/reflect = Use's Belt to reflect what you have learned"
+pause 1
+message "/Judge <insert name> = allows you to judge how close other are to becoming a Ranger"
+}
+
+F1
+{
+if @my.waist_item != "belt of the wild"
+	"/equip beltofthewild\r"
+end if 
+if isMorphed == 0
+	SETGLOBAL whatShape 1
+		SETGLOBAL isMorphed 1
+			"/useitem beltofthewild /shape " FirstMorphName " \r"
+				
+					goto end
+end if
+if isMorphed == 1
+	if whatShape == 1
+		"/useitem beltofthewild /return\r"
+			SETGLOBAL whatShape 0
+				SETGLOBAL isMorphed 0
+					
+	else if whatShape != 1
+		SETGLOBAL whatShape 1
+			SETGLOBAL isMorphed 1
+				"/useitem beltofthewild /shape " FirstMorphName " \r"
+					
+	end if
+label end
+end if
+}
+
+F2
+{
+if @my.waist_item != "belt of the wild"
+	"/equip beltofthewild\r"
+end if
+if isMorphed == 0
+		"/useitem beltofthewild /shape " SecondMorphName " \r"
+			SETGLOBAL whatShape 2
+				SETGLOBAL isMorphed 1
+						goto end
+end if
+if isMorphed == 1
+	if whatShape == 2
+		"/useitem beltofthewild /return\r"
+			SETGLOBAL whatShape 0
+				SETGLOBAL isMorphed 0	
+	else if whatShape != 2
+		"/useitem beltofthewild /shape " SecondMorphName " \r"
+			SETGLOBAL whatShape 2
+				SETGLOBAL isMorphed 1
+	end if
+label end
+end if
+}
+
+F3
+{
+if speeding == 0
+	if @my.left_item != "Nothing"
+		if @my.left_item != "Heartwood Charm"
+			setglobal swaobackL @my.left_item
+		end if
+	end if
+	if @my.left_item != "Heartwood Charm"
+		"/equip heartwood\r"
+	end if
+		SETGLOBAL speeding 1		
+			"/useitem left\r"
+else
+	if speeding == 1
+		SETGLOBAL speeding 0
+			if @my.left_item == "Heartwood Charm"
+				"/useitem heartwood /slow \r"
+					call uneq
+			end if
+	end if
+end if
+}
+
+uneq
+{
+if swaobackL != "Heartwood Charm"
+	if swaobackL != ""
+		message "* swapping left hand back to" swaobackL " "
+			"/equip " swaobackL " \r"
+				SETGLOBAL swaobackL ""
+	else 
+		"/unequip heartwood \r"
+	end if
+end if
+}
+
+F4
+{
+set logck @env.textlog
+label tryagain
+if @my.finger_item != "Shieldstone"
+	"/equip shieldstone\r"
+end if
+if logck >= "You have no"
+message "* out of Shield Stone's"
+	goto end
+else
+	"/useitem shieldstone\r" 
+		if logck >= "Your Shieldstone goes inert"
+			goto tryagain
+end if
+label end
+}
+
+F5
+{
+if @my.waist_item != "Belt of the Wild"
+	"/equip beltofthewild\r"
+end if
+	"/useitem belt /befriend\r"
+}
+
+F6
+{
+if @my.waist_item != "Belt of the Wild"
+	"/equip beltofthewild\r"
+end if
+	"/useitem belt /control\r"
+}
+
+"/reflect"
+{
+if @my.waist_item != "belt of the wild"
+	"/equip beltofthewild\r"
+end if
+	"/useitem beltofthewild /reflect\r"
+}
+
+F7 
+{
+if @my.waist_item != "Belt of the Wild"
+	"/equip beltofthewild\r"
+end if
+	"/useitem belt /dismiss\r"
+}
+
+"/judge"
+{
+if @my.waist_item != "belt of the wild"
+	"/equip beltofthewild\r"
+end if
+if @text.word[0] != ""
+setglobal theJudged @text.word[0]
+"/useitem belt /judge " theJudged "\r"
+call judgemenot
+else if @text.word[0] == ""
+message "* judge not that ye be not judged"
+end if
+}
+
+judgemenot
+{
+
+set logck @env.textlog
+if logck >= "has barely begun to learn about the earth."
+	"/ponder " theJudged " has barely begun to learn about the earth.\r"
+		message "* 8 more messages to go."
+else if logck >= "has begun to learn about the earth."
+	"/ponder " theJudged " has begun to learn about the earth.\r"
+		message "* 7 more messages to go."
+else if logck >= "still has much to learn about the earth."
+	"/ponder " theJudged " still has much to learn about the earth.\r"
+		message "* 6 more messages to go."
+else if logck >= "is making progress towards becoming a Ranger."
+	"/ponder " theJudged " is making progress towards becoming a Ranger.\r"
+		message "* 5 more messages to go."
+else if logck >= "is making good progress towards becoming a Ranger."
+	"/ponder " theJudged " is making good progress towards becoming a Ranger.\r"
+		message "* 4 more messages to go."
+else if logck >= "is making excellent progress towards becoming a Ranger."
+	"/ponder " theJudged " is making excellent progress towards becoming a Ranger.\r"
+		message "* 3 more messages to go."
+else if logck >= "is knowledgeable about the earth."
+	"/ponder " theJudged " is knowledgeable about the earth.\r"
+		message "* 2 more messages to go."
+else if logck >= "is very knowledgeable about the earth."
+	"/ponder " theJudged " is very knowledgeable about the earth.\r"
+		message "* 1 more message to go."
+else if logck >= "is nearly ready to become a Ranger."
+	"/ponder " theJudged " is nearly ready to become a Ranger.\r"
+		message "* Ready for Rangerhood."
+else if logck >= "has chosen another path and cannot become a Ranger."
+	"/ponder " theJudged " has chosen another path and cannot become a Ranger.\r"
+end if
+}

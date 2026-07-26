@@ -55,6 +55,7 @@ Possible to add support for: FreeBSD, OpenBSD, Chrome, Firefox, Safari, Edge, An
 * Use of Metal API is important because OpenGL support has been deprecated for ages on OS X and will be stuck at v4.1 and eventually removed.
 - Self-contained portable binary, no installers or external dependencies
 - Open-source and public domain to prevent it becoming unmaintained abandonware
+- Full Clan Lord client macro system: file-based macros with expressions, replacements, key/click/function macros, variables, flow control (goto, if/else-if/else, random), timing (pause/timingk/atimek), and env settings. Drop-in compatible with existing macro files.
 - Powerful scripting system using a common language, meaning most users will be able to seek support from LLMs.
 - Choices for more modern input schemes like enter-to-talk, WASD and use of non-fkeys
 * Modern laptops often do not support touchpad + keyboard simultaneously (palm rejection)
