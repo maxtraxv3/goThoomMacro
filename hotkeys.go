@@ -22,6 +22,7 @@ const hotkeyCommandInputHeight float32 = 20
 
 type HotkeyCommand struct {
 	Command string `json:"command,omitempty"`
+	Pause   int    `json:"pause,omitempty"` // milliseconds to wait before this command
 }
 
 type Hotkey struct {
@@ -882,7 +883,47 @@ func applyHotkeyVars(cmd string) (string, bool) {
 	}
 	cmd = out
 
+	// Resolve macro system variables (@my.*, @selplayer.*, @env.*, @random, etc.)
+	if strings.Contains(cmd, "@") {
+		cmd = macroResolveHotkeyVars(cmd)
+	}
+
 	return cmd, true
+}
+
+// macroResolveHotkeyVars resolves macro system variable references in hotkey commands.
+func macroResolveHotkeyVars(cmd string) string {
+	// Simple approach: find all @word patterns and resolve them
+	result := cmd
+	for {
+		idx := strings.Index(result, "@")
+		if idx < 0 {
+			break
+		}
+		// Find the end of the variable name
+		end := idx + 1
+		for end < len(result) {
+			ch := result[end]
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' {
+				end++
+			} else {
+				break
+			}
+		}
+		varName := result[idx:end]
+		if varName == "" {
+			break
+		}
+		// Try to resolve the variable
+		val, ok := macroResolveVariable(varName)
+		if ok {
+			result = result[:idx] + val + result[end:]
+		} else {
+			// Skip this unresolvable variable
+			break
+		}
+	}
+	return result
 }
 
 func updateHotkeyRecording() {
@@ -1002,7 +1043,11 @@ func checkHotkeys() {
 							consoleMessage("> " + cmd)
 						}
 					}
-					enqueueCommand(cmd)
+					if c.Pause > 0 {
+						enqueueCommandWithPause(cmd, c.Pause)
+					} else {
+						enqueueCommand(cmd)
+					}
 				}
 				nextCommand()
 				break

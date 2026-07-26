@@ -11,6 +11,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -133,6 +135,7 @@ var bucketTimes [5]int64
 var commandNum uint32 = 1
 var pendingCommand string
 var commandQueue []string
+var commandPauseUntil time.Time
 var playerName string
 var playerIndex uint8 = 0xff
 
@@ -142,11 +145,45 @@ func enqueueCommand(cmd string) {
 	}
 }
 
-func nextCommand() {
-	if pendingCommand == "" && len(commandQueue) > 0 {
-		pendingCommand = commandQueue[0]
-		commandQueue = commandQueue[1:]
+// enqueueCommandWithPause enqueues a command with a delay before it executes.
+func enqueueCommandWithPause(cmd string, delayMs int) {
+	if delayMs > 0 {
+		pauseCmd := fmt.Sprintf("__pause__%d", delayMs)
+		commandQueue = append(commandQueue, pauseCmd)
 	}
+	if cmd != "" {
+		commandQueue = append(commandQueue, cmd)
+	}
+}
+
+func nextCommand() {
+	if pendingCommand != "" {
+		return
+	}
+	if len(commandQueue) == 0 {
+		return
+	}
+	// Check if we're in a pause
+	if !commandPauseUntil.IsZero() {
+		if time.Now().Before(commandPauseUntil) {
+			return
+		}
+		commandPauseUntil = time.Time{}
+	}
+	cmd := commandQueue[0]
+	commandQueue = commandQueue[1:]
+	// Handle internal pause commands
+	if strings.HasPrefix(cmd, "__pause__") {
+		msStr := strings.TrimPrefix(cmd, "__pause__")
+		ms, err := strconv.Atoi(msStr)
+		if err == nil && ms > 0 {
+			commandPauseUntil = time.Now().Add(time.Duration(ms) * time.Millisecond)
+		}
+		// Try the next command after the pause
+		nextCommand()
+		return
+	}
+	pendingCommand = cmd
 }
 
 // updateFrameCounters tracks frame statistics and detects dropped frames.

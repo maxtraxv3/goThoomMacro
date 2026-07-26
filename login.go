@@ -538,6 +538,7 @@ func runLoginAttempt(ctx context.Context, target serverTarget, sendVersion int, 
 	applyLocalLabels()
 	applyEnabledScripts()
 	loadShortcuts()
+	macroLoadCharacter(playerName)
 
 	var resp []byte
 	var result int16

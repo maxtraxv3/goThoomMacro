@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 const (
 	maxMessages = 1000
 	sndTink     = 58 // notification sound
@@ -14,12 +16,17 @@ func consoleMessage(msg string) {
 	if wasmPrivacyActive() {
 		return
 	}
+	msg = strings.ReplaceAll(msg, "\r", "")
+	if msg == "" {
+		return
+	}
 	if msg == "You have been idle for too long." {
 		showNotification(msg)
 		playSound([]uint16{sndTink})
 	}
 	consoleLog.Add(msg)
 	appendConsoleLog(msg)
+	macroState.TextLogBuffer = msg
 
 	updateConsoleWindow()
 

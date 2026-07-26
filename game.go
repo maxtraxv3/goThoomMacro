@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"gothoom/eui"
 
@@ -753,6 +754,26 @@ func (g *Game) Update() error {
 			inputPos += len(newChars)
 			changedInput = true
 			textChanged = true
+			// Check for replacement macros on word boundaries (any non-letter/non-digit key)
+			for _, ch := range newChars {
+				if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
+					// Extract the word before this delimiter
+					line := string(inputText[:inputPos])
+					line = line[:len(line)-1] // exclude the delimiter
+					fields := strings.Fields(line)
+					if len(fields) > 0 {
+						word := fields[len(fields)-1]
+						if repl := macroDoReplacement(word); repl != "" {
+							// Find the word start position
+							wordStart := inputPos - 1 - len([]rune(word))
+							if wordStart >= 0 {
+								inputText = append(inputText[:wordStart], append([]rune(repl), inputText[inputPos-1:]...)...)
+								inputPos = wordStart + len([]rune(repl))
+							}
+						}
+					}
+				}
+			}
 		}
 		ctrl := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyControlLeft) || ebiten.IsKeyPressed(ebiten.KeyControlRight)
 		if ctrl && inpututil.IsKeyJustPressed(ebiten.KeyV) {
@@ -830,6 +851,23 @@ func (g *Game) Update() error {
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 			orig := string(inputText)
+			// Check replacement macros on the last word before processing
+			fields := strings.Fields(orig)
+			if len(fields) > 0 {
+				lastWord := fields[len(fields)-1]
+				if repl := macroDoReplacement(lastWord); repl != "" {
+					runes := []rune(orig)
+					lastWordRunes := []rune(lastWord)
+					wordEnd := len(runes)
+					wordStart := wordEnd - len(lastWordRunes)
+					if wordStart >= 0 {
+						newRunes := make([]rune, 0, wordStart+len([]rune(repl)))
+						newRunes = append(newRunes, runes[:wordStart]...)
+						newRunes = append(newRunes, []rune(repl)...)
+						orig = string(newRunes)
+					}
+				}
+			}
 			txt := runInputHandlers(orig)
 			txt = strings.TrimSpace(txt)
 			if txt == "" {
@@ -838,7 +876,10 @@ func (g *Game) Update() error {
 				txt = strings.TrimSpace(orig)
 			}
 			if txt != "" {
-				if strings.HasPrefix(txt, "/play ") {
+				// Check for expression macros first
+				if macroDoText(txt) {
+					// Expression macro handled it; don't send raw text
+				} else if strings.HasPrefix(txt, "/play ") {
 					tune := strings.TrimSpace(txt[len("/play "):])
 					if musicDebug {
 						msg := "/play " + tune
@@ -1051,15 +1092,43 @@ func (g *Game) Update() error {
 		}
 	}
 	if click && !uiMouseDown && inGame {
-		handleWorldClick(baseX, baseY, ebiten.MouseButtonLeft)
+		clickedName := worldInfoAt(baseX, baseY).Mobile.Name
+		if !macroProcessClickEvents(clickedName) {
+			handleWorldClick(baseX, baseY, ebiten.MouseButtonLeft)
+		}
 	}
 	if rightClick && inGame && !pointInUI(mx, my) {
-		handleWorldClick(baseX, baseY, ebiten.MouseButtonRight)
+		clickedName := worldInfoAt(baseX, baseY).Mobile.Name
+		if !macroProcessClickEvents(clickedName) {
+			handleWorldClick(baseX, baseY, ebiten.MouseButtonRight)
+		}
 	}
 	if middleClick && inGame && !pointInUI(mx, my) {
-		handleWorldClick(baseX, baseY, ebiten.MouseButtonMiddle)
+		clickedName := worldInfoAt(baseX, baseY).Mobile.Name
+		if !macroProcessClickEvents(clickedName) {
+			handleWorldClick(baseX, baseY, ebiten.MouseButtonMiddle)
+		}
 	}
 	// (right-click handling for menus/copy is handled earlier)
+
+	// Process scroll wheel macros even without a button click.
+	if macroState.Clicks != nil {
+		wx, wy := ebiten.Wheel()
+		if wx != 0 || wy != 0 {
+			mods := macroCurrentMods()
+			clickedName := worldInfoAt(baseX, baseY).Mobile.Name
+			if wy > 0 {
+				macroDoClick(2048, mods, clickedName) // wheelup
+			} else if wy < 0 {
+				macroDoClick(2049, mods, clickedName) // wheeldown
+			}
+			if wx > 0 {
+				macroDoClick(2051, mods, clickedName) // wheelright
+			} else if wx < 0 {
+				macroDoClick(2050, mods, clickedName) // wheelleft
+			}
+		}
+	}
 
 	// Default desired target from current pointer, even if outside game window.
 	// We'll freeze it to the previous value only when we're NOT walking.
@@ -1118,7 +1187,10 @@ func (g *Game) Update() error {
 	}
 
 	updateHotkeyRecording()
-	checkHotkeys()
+	if !macroProcessKeyEvents() {
+		checkHotkeys()
+	}
+	macroContinue()
 
 	return nil
 }
@@ -2630,6 +2702,7 @@ func initGame() {
 	close(gameStarted)
 	go loadSpellcheck()
 	go loadScripts()
+	macroInit()
 }
 
 func makeGameWindow() {

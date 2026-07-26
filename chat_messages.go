@@ -23,6 +23,11 @@ func chatMessage(msg string) {
 		return
 	}
 
+	msg = strings.ReplaceAll(msg, "\r", "")
+	if msg == "" {
+		return
+	}
+
 	speaker := chatSpeaker(msg)
 	if speaker != "" {
 		playersMu.RLock()
@@ -38,6 +43,7 @@ func chatMessage(msg string) {
 
 	chatLog.Add(msg)
 	appendChatLog(msg)
+	macroState.TextLogBuffer = msg
 
 	updateChatWindow()
 
