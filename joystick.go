@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strconv"
-	"strings"
 
 	"gothoom/eui"
 
@@ -32,16 +32,66 @@ var (
 	click3Input           *eui.ItemData
 	inputImgItem          *eui.ItemData
 	inputImg              *ebiten.Image
+	buttonTesterText      *eui.ItemData
 	joystickIDs           []ebiten.GamepadID
 	joystickNames         []string
 	selectedJoystick      int
 	lastAxisCount         int
+	buttonCmdInputs       map[string]*eui.ItemData
 )
 
 const (
-	joystickImgW = 260
-	joystickImgH = 150
+	joystickImgW = 290
+	joystickImgH = 320
 )
+
+// joyButtonNames maps ebiten gamepad button IDs to human-readable names.
+var joyButtonNames = map[ebiten.GamepadButton]string{
+	ebiten.GamepadButton0:  "a",
+	ebiten.GamepadButton1:  "b",
+	ebiten.GamepadButton2:  "x",
+	ebiten.GamepadButton3:  "y",
+	ebiten.GamepadButton4:  "lb",
+	ebiten.GamepadButton5:  "rb",
+	ebiten.GamepadButton6:  "lt",
+	ebiten.GamepadButton7:  "rt",
+	ebiten.GamepadButton8:  "back",
+	ebiten.GamepadButton9:  "start",
+	ebiten.GamepadButton10: "l3",
+	ebiten.GamepadButton11: "r3",
+	ebiten.GamepadButton12: "dpad_up",
+	ebiten.GamepadButton13: "dpad_right",
+	ebiten.GamepadButton14: "dpad_down",
+	ebiten.GamepadButton15: "dpad_left",
+}
+
+// joyButtonDisplayNames maps button names to display labels.
+var joyButtonDisplayNames = map[string]string{
+	"a":         "A",
+	"b":         "B",
+	"x":         "X",
+	"y":         "Y",
+	"lb":        "LB (Left Bumper)",
+	"rb":        "RB (Right Bumper)",
+	"lt":        "LT (Left Trigger)",
+	"rt":        "RT (Right Trigger)",
+	"back":      "Back",
+	"start":     "Start",
+	"l3":        "L3 (Left Stick)",
+	"r3":        "R3 (Right Stick)",
+	"dpad_up":   "D-Pad Up",
+	"dpad_down": "D-Pad Down",
+	"dpad_left": "D-Pad Left",
+	"dpad_right":"D-Pad Right",
+}
+
+// joyButtonOrder defines the order buttons appear in the UI.
+var joyButtonOrder = []string{
+	"a", "b", "x", "y",
+	"lb", "rb", "lt", "rt",
+	"back", "start", "l3", "r3",
+	"dpad_up", "dpad_down", "dpad_left", "dpad_right",
+}
 
 func makeJoystickWindow() {
 	if joystickWin != nil {
@@ -53,19 +103,18 @@ func makeJoystickWindow() {
 	joystickWin.Movable = true
 	joystickWin.Resizable = true
 	joystickWin.AutoSize = true
-	joystickWin.NoScroll = true
 	joystickWin.SetZone(eui.HZoneCenter, eui.VZoneMiddleTop)
 
-	root := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_VERTICAL, Fixed: true}
-	root.Size = eui.Point{X: 350, Y: 200}
+	root := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL}
 	joystickWin.AddItem(root)
 
-	// Prominent notice that this feature is WIP
-	wipLabel, _ := eui.NewText()
-	wipLabel.Text = "Work in progress, does not function"
-	wipLabel.FontSize = 18
-	wipLabel.Size = eui.Point{X: 350, Y: 28}
-	root.AddItem(wipLabel)
+	// Left column: visualizer at top, then settings
+	leftCol := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_VERTICAL}
+	root.AddItem(leftCol)
+
+	// Right column: button commands
+	rightCol := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_VERTICAL}
+	root.AddItem(rightCol)
 
 	joystickIDs = ebiten.AppendGamepadIDs(joystickIDs[:0])
 	joystickNames = joystickNames[:0]
@@ -73,10 +122,29 @@ func makeJoystickWindow() {
 		joystickNames = append(joystickNames, ebiten.GamepadName(id))
 	}
 
+	// Visualizer image at the top
+	inputImgItem, inputImg = eui.NewImageItem(joystickImgW, joystickImgH)
+	leftCol.AddItem(inputImgItem)
+
+	// Button tester: shows last pressed button name + number
+	buttonTesterText, _ = eui.NewText()
+	buttonTesterText.Text = "Press any button to test"
+	buttonTesterText.FontSize = 11
+	buttonTesterText.Size = eui.Point{X: 290, Y: 20}
+	leftCol.AddItem(buttonTesterText)
+
+	// Spacer
+	spacer := func() {
+		s, _ := eui.NewText()
+		s.Size = eui.Point{X: 290, Y: 6}
+		leftCol.AddItem(s)
+	}
+	spacer()
+
 	controllerDD, controllerEvents = eui.NewDropdown()
 	controllerDD.Label = "Controller"
 	controllerDD.Options = joystickNames
-	controllerDD.Size = eui.Point{X: 350, Y: 24}
+	controllerDD.Size = eui.Point{X: 290, Y: 24}
 	controllerEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventDropdownSelected {
 			selectedJoystick = ev.Index
@@ -87,7 +155,7 @@ func makeJoystickWindow() {
 			}
 		}
 	}
-	root.AddItem(controllerDD)
+	leftCol.AddItem(controllerDD)
 
 	refreshBtn, refreshEvents := eui.NewButton()
 	refreshBtn.Text = "Refresh"
@@ -113,17 +181,19 @@ func makeJoystickWindow() {
 			joystickWin.Refresh()
 		}
 	}
-	root.AddItem(refreshBtn)
+	leftCol.AddItem(refreshBtn)
 
 	axesText, _ = eui.NewText()
 	axesText.FontSize = 12
-	axesText.Size = eui.Point{X: 350, Y: 24}
-	root.AddItem(axesText)
+	axesText.Size = eui.Point{X: 290, Y: 24}
+	leftCol.AddItem(axesText)
 
 	buttonsText, _ = eui.NewText()
 	buttonsText.FontSize = 12
-	buttonsText.Size = eui.Point{X: 350, Y: 24}
-	root.AddItem(buttonsText)
+	buttonsText.Size = eui.Point{X: 290, Y: 24}
+	leftCol.AddItem(buttonsText)
+
+	spacer()
 
 	enableCB, enableEvents := eui.NewCheckbox()
 	enableCB.Text = "Enable Gamepad"
@@ -134,75 +204,116 @@ func makeJoystickWindow() {
 			settingsDirty = true
 		}
 	}
-	root.AddItem(enableCB)
+	leftCol.AddItem(enableCB)
+
+	spacer()
 
 	walkStickDD, walkEvents = eui.NewDropdown()
 	walkStickDD.Label = "Walk Stick"
-	walkStickDD.Size = eui.Point{X: 260, Y: 24}
+	walkStickDD.Size = eui.Point{X: 290, Y: 24}
 	walkEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventDropdownSelected {
 			gs.JoystickWalkStick = ev.Index - 1
 			settingsDirty = true
 		}
 	}
-	root.AddItem(walkStickDD)
+	leftCol.AddItem(walkStickDD)
 
 	walkDeadzoneSlider, walkDZEvents = eui.NewSlider()
 	walkDeadzoneSlider.Label = "Walk Deadzone"
 	walkDeadzoneSlider.MinValue = 0.01
 	walkDeadzoneSlider.MaxValue = 0.2
 	walkDeadzoneSlider.Value = float32(gs.JoystickWalkDeadzone)
-	walkDeadzoneSlider.Size = eui.Point{X: 260, Y: 24}
+	walkDeadzoneSlider.Size = eui.Point{X: 290, Y: 24}
 	walkDZEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.JoystickWalkDeadzone = float64(ev.Value)
 			settingsDirty = true
 		}
 	}
-	root.AddItem(walkDeadzoneSlider)
+	leftCol.AddItem(walkDeadzoneSlider)
+
+	spacer()
 
 	cursorStickDD, cursorEvents = eui.NewDropdown()
 	cursorStickDD.Label = "Cursor Stick"
-	cursorStickDD.Size = eui.Point{X: 260, Y: 24}
+	cursorStickDD.Size = eui.Point{X: 290, Y: 24}
 	cursorEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventDropdownSelected {
 			gs.JoystickCursorStick = ev.Index - 1
 			settingsDirty = true
 		}
 	}
-	root.AddItem(cursorStickDD)
+	leftCol.AddItem(cursorStickDD)
 
 	cursorDeadzoneSlider, cursorDZEvents = eui.NewSlider()
 	cursorDeadzoneSlider.Label = "Cursor Deadzone"
 	cursorDeadzoneSlider.MinValue = 0.01
 	cursorDeadzoneSlider.MaxValue = 0.2
 	cursorDeadzoneSlider.Value = float32(gs.JoystickCursorDeadzone)
-	cursorDeadzoneSlider.Size = eui.Point{X: 260, Y: 24}
+	cursorDeadzoneSlider.Size = eui.Point{X: 290, Y: 24}
 	cursorDZEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.JoystickCursorDeadzone = float64(ev.Value)
 			settingsDirty = true
 		}
 	}
-	root.AddItem(cursorDeadzoneSlider)
+	leftCol.AddItem(cursorDeadzoneSlider)
+
+	spacer()
 
 	click1Input, _ = eui.NewInput()
 	click1Input.Label = "Click1 Button"
-	click1Input.Size = eui.Point{X: 350, Y: 24}
-	root.AddItem(click1Input)
+	click1Input.Size = eui.Point{X: 290, Y: 24}
+	leftCol.AddItem(click1Input)
 
 	click2Input, _ = eui.NewInput()
 	click2Input.Label = "Click2 Button"
-	click2Input.Size = eui.Point{X: 350, Y: 24}
-	root.AddItem(click2Input)
+	click2Input.Size = eui.Point{X: 290, Y: 24}
+	leftCol.AddItem(click2Input)
 
 	click3Input, _ = eui.NewInput()
 	click3Input.Label = "Click3 Button"
-	click3Input.Size = eui.Point{X: 350, Y: 24}
-	root.AddItem(click3Input)
+	click3Input.Size = eui.Point{X: 290, Y: 24}
+	leftCol.AddItem(click3Input)
+	cmdHeader, _ := eui.NewText()
+	cmdHeader.Text = "Button Commands"
+	cmdHeader.FontSize = 12
+	cmdHeader.Size = eui.Point{X: 290, Y: 20}
+	rightCol.AddItem(cmdHeader)
 
-	inputImgItem, inputImg = eui.NewImageItem(joystickImgW, joystickImgH)
-	root.AddItem(inputImgItem)
+	cmdSubHeader, _ := eui.NewText()
+	cmdSubHeader.Text = "Enter a command (/sit) or macro name (heal)"
+	cmdSubHeader.FontSize = 10
+	cmdSubHeader.Size = eui.Point{X: 290, Y: 16}
+	rightCol.AddItem(cmdSubHeader)
+
+	buttonCmdInputs = make(map[string]*eui.ItemData)
+	if gs.JoystickCommands == nil {
+		gs.JoystickCommands = make(map[string]string)
+	}
+	for _, name := range joyButtonOrder {
+		display := joyButtonDisplayNames[name]
+		if display == "" {
+			display = name
+		}
+		input, events := eui.NewInput()
+		input.Label = display
+		input.Size = eui.Point{X: 290, Y: 24}
+		input.FontSize = 10
+		if cmd, ok := gs.JoystickCommands[name]; ok {
+			input.Text = cmd
+		}
+		btnName := name
+		events.Handle = func(ev eui.UIEvent) {
+			if ev.Type == eui.EventInputChanged {
+				gs.JoystickCommands[btnName] = ev.Text
+				settingsDirty = true
+			}
+		}
+		buttonCmdInputs[name] = input
+		rightCol.AddItem(input)
+	}
 
 	if gs.JoystickBindings != nil {
 		if b, ok := gs.JoystickBindings["click1"]; ok {
@@ -267,71 +378,211 @@ func drawJoystickDisplay(id ebiten.GamepadID) {
 		return
 	}
 	inputImg.Clear()
+	imgW := float32(joystickImgW)
 
-	drawStick := func(cx, cy float32, stick int, label string, dz float64) {
-		vector.FillCircle(inputImg, cx, cy, 40, color.NRGBA{64, 64, 64, 255}, true)
-		if dz > 0 {
-			vector.FillCircle(inputImg, cx, cy, float32(dz)*40, color.NRGBA{32, 32, 32, 255}, true)
+	axisCount := ebiten.GamepadAxisCount(id)
+	buttonCount := ebiten.GamepadButtonCount(id)
+
+	isPressed := func(b int) bool {
+		if b >= buttonCount {
+			return false
 		}
-		if stick >= 0 {
-			axisIndex := stick * 2
-			if axisIndex+1 < ebiten.GamepadAxisCount(id) {
-				ax := ebiten.GamepadAxisValue(id, axisIndex)
-				ay := ebiten.GamepadAxisValue(id, axisIndex+1)
-				vector.FillCircle(inputImg, cx+float32(ax)*40, cy+float32(ay)*40, 5, color.NRGBA{0, 255, 0, 255}, true)
+		return ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton(b))
+	}
+
+	// Controller body outline
+	bodyCol := color.NRGBA{50, 50, 60, 255}
+	bodyX, bodyY := float32(20), float32(20)
+	bodyW, bodyH := imgW-40, float32(180)
+	vector.FillRect(inputImg, bodyX, bodyY, bodyW, bodyH, bodyCol, true)
+	vector.StrokeRect(inputImg, bodyX, bodyY, bodyW, bodyH, 1, color.NRGBA{90, 90, 100, 255}, false)
+
+	// Grips (angled rectangles on bottom-left and bottom-right)
+	gripCol := color.NRGBA{45, 45, 55, 255}
+	vector.FillRect(inputImg, bodyX+2, bodyY+bodyH-10, 40, 30, gripCol, true)
+	vector.FillRect(inputImg, bodyX+bodyW-42, bodyY+bodyH-10, 40, 30, gripCol, true)
+
+	// Helper to draw a round button with label + number
+	drawRoundBtn := func(cx, cy, r float32, btnIdx int, lbl string) {
+		bg := color.NRGBA{60, 60, 70, 255}
+		outline := color.NRGBA{90, 90, 100, 255}
+		if isPressed(btnIdx) {
+			bg = color.NRGBA{0, 200, 0, 255}
+			outline = color.NRGBA{0, 255, 0, 255}
+		}
+		vector.FillCircle(inputImg, cx, cy, r, bg, true)
+		vector.StrokeCircle(inputImg, cx, cy, r, 1, outline, false)
+		sc := float32(0.5)
+		if len(lbl) > 1 {
+			sc = 0.4
+		}
+		tw, _ := text.Measure(lbl, mainFont, 0)
+		op := &text.DrawOptions{}
+		op.GeoM.Scale(float64(sc), float64(sc))
+		op.GeoM.Translate(float64(cx-float32(tw)*sc/2), float64(cy-4*sc))
+		text.Draw(inputImg, lbl, mainFont, op)
+		numStr := fmt.Sprintf("#%d", btnIdx)
+		nw, _ := text.Measure(numStr, mainFont, 0)
+		nop := &text.DrawOptions{}
+		nop.GeoM.Scale(0.3, 0.3)
+		nop.GeoM.Translate(float64(cx-float32(nw)*0.15), float64(cy+r+2))
+		text.Draw(inputImg, numStr, mainFont, nop)
+	}
+
+	// Draw a dpad cross
+	drawDpad := func(cx, cy, size float32) {
+		pressed := color.NRGBA{0, 200, 0, 255}
+		off := color.NRGBA{55, 55, 65, 255}
+		half := size / 2
+		arm := size / 3
+		// Vertical arm
+		vCol := off
+		if isPressed(12) || isPressed(14) {
+			vCol = pressed
+		}
+		vector.FillRect(inputImg, cx-arm/2, cy-half, arm, size, vCol, true)
+		// Horizontal arm
+		hCol := off
+		if isPressed(13) || isPressed(15) {
+			hCol = pressed
+		}
+		vector.FillRect(inputImg, cx-half, cy-arm/2, size, arm, hCol, true)
+		// Direction labels
+		sc := float32(0.35)
+		type dir struct {
+			lbl   string
+			dx, dy, btn int
+		}
+		dirs := []dir{
+			{"U", 0, -1, 12}, {"D", 0, 1, 14}, {"L", -1, 0, 15}, {"R", 1, 0, 13},
+		}
+		for _, d := range dirs {
+			lx := cx + float32(d.dx)*(half+3)
+			ly := cy + float32(d.dy)*(half+3)
+			lw, _ := text.Measure(d.lbl, mainFont, 0)
+			dop := &text.DrawOptions{}
+			dop.GeoM.Scale(float64(sc), float64(sc))
+			dop.ColorScale.ScaleWithColor(color.NRGBA{120, 120, 130, 255})
+			if isPressed(d.btn) {
+				dop.ColorScale.ScaleWithColor(color.NRGBA{0, 255, 0, 255})
+			}
+			dop.GeoM.Translate(float64(lx-float32(lw)*sc/2), float64(ly-4*sc))
+			text.Draw(inputImg, d.lbl, mainFont, dop)
+		}
+	}
+
+	// Draw stick with deadzone
+	drawStick := func(cx, cy, stickIdx float32, dz float64) {
+		r := float32(22)
+		// Stick base
+		vector.FillCircle(inputImg, cx, cy, r, color.NRGBA{35, 35, 40, 255}, true)
+		vector.StrokeCircle(inputImg, cx, cy, r, 1, color.NRGBA{70, 70, 80, 255}, false)
+		// Deadzone ring
+		if dz > 0 {
+			dzR := float32(dz) * r
+			vector.StrokeCircle(inputImg, cx, cy, dzR, 1, color.NRGBA{200, 80, 80, 200}, false)
+		}
+		// Stick position
+		if stickIdx >= 0 {
+			ai := int(stickIdx) * 2
+			if ai+1 < axisCount {
+				ax := float32(ebiten.GamepadAxisValue(id, ai))
+				ay := float32(ebiten.GamepadAxisValue(id, ai+1))
+				dist := float32(math.Sqrt(float64(ax*ax + ay*ay)))
+				if dist > 1 {
+					ax /= dist
+					ay /= dist
+					dist = 1
+				}
+				dotCol := color.NRGBA{0, 200, 0, 255}
+				if dist < float32(dz) {
+					dotCol = color.NRGBA{200, 60, 60, 255}
+				}
+				vector.FillCircle(inputImg, cx+ax*r*0.8, cy+ay*r*0.8, 5, dotCol, true)
+				vector.FillCircle(inputImg, cx+ax*r*0.8, cy+ay*r*0.8, 2, color.NRGBA{255, 255, 255, 255}, true)
 			}
 		}
-		metrics := mainFont.Metrics()
-		txtW, _ := text.Measure(label, mainFont, 0)
-		scale := 0.7
-		op := &text.DrawOptions{}
-		op.GeoM.Translate(float64(cx)-float64(txtW)*scale/2, float64(cy)+40+metrics.HAscent*scale)
-		op.GeoM.Scale(scale, scale)
-		text.Draw(inputImg, label, mainFont, op)
 	}
 
-	drawStick(60, 60, gs.JoystickWalkStick, "Walk", gs.JoystickWalkDeadzone)
-	drawStick(190, 90, gs.JoystickCursorStick, "Cursor", gs.JoystickCursorDeadzone)
+	// Positions (relative to body)
+	lbX, lbY := bodyX+35, bodyY+12
+	rbX := bodyX+bodyW-35
+	rbY := lbY
+	ltX := bodyX+15
+	rtX := bodyX+bodyW-15
 
-	drawBtn := func(cx, cy, r float32, btn ebiten.GamepadButton, lbl string) {
-		col := color.NRGBA{128, 128, 128, 255}
-		if ebiten.IsGamepadButtonPressed(id, btn) {
-			col = color.NRGBA{0, 255, 0, 255}
+	// Bumpers
+	drawRoundBtn(lbX, lbY, 10, 4, "LB")
+	drawRoundBtn(rbX, rbY, 10, 5, "RB")
+
+	// Triggers
+	drawRoundBtn(ltX, lbY-4, 8, 6, "LT")
+	drawRoundBtn(rtX, rbY-4, 8, 7, "RT")
+
+	// Left stick + D-pad
+	lStickX := bodyX + 55
+	lStickY := bodyY + 70
+	drawStick(lStickX, lStickY, float32(gs.JoystickWalkStick), gs.JoystickWalkDeadzone)
+	// L3
+	if buttonCount > 10 {
+		drawRoundBtn(lStickX, lStickY-30, 6, 10, "L3")
+	}
+
+	dpadX := bodyX + 110
+	dpadY := bodyY + 100
+	drawDpad(dpadX, dpadY, 36)
+
+	// Center buttons
+	drawRoundBtn(bodyX+bodyW/2-14, bodyY+35, 7, 8, "Bk")
+	drawRoundBtn(bodyX+bodyW/2+14, bodyY+35, 7, 9, "St")
+
+	// Right stick + face buttons
+	rStickX := bodyX + bodyW - 55
+	rStickY := bodyY + 70
+	drawStick(rStickX, rStickY, float32(gs.JoystickCursorStick), gs.JoystickCursorDeadzone)
+	// R3
+	if buttonCount > 11 {
+		drawRoundBtn(rStickX, rStickY-30, 6, 11, "R3")
+	}
+
+	// Face buttons: A=0, B=1, X=2, Y=3 in diamond
+	faceX := bodyX + bodyW - 110
+	faceY := bodyY + 75
+	faceR := float32(11)
+	drawRoundBtn(faceX, faceY+18, faceR, 0, "A")     // bottom
+	drawRoundBtn(faceX+18, faceY, faceR, 1, "B")     // right
+	drawRoundBtn(faceX-18, faceY, faceR, 2, "X")     // left
+	drawRoundBtn(faceX, faceY-18, faceR, 3, "Y")     // top
+
+	// Axis bars at the bottom
+	barY0 := bodyY + bodyH + 8
+	barTitleOp := &text.DrawOptions{}
+	barTitleOp.GeoM.Scale(0.5, 0.5)
+	barTitleOp.GeoM.Translate(4, float64(barY0+10))
+	text.Draw(inputImg, fmt.Sprintf("Axes (%d)  Buttons (%d)", axisCount, buttonCount), mainFont, barTitleOp)
+
+	barY := barY0 + 16
+	for a := 0; a < axisCount; a++ {
+		ay := barY + float32(a*14)
+		val := ebiten.GamepadAxisValue(id, a)
+		vector.FillRect(inputImg, 4, ay, imgW-8, 10, color.NRGBA{40, 40, 40, 255}, true)
+		vector.FillRect(inputImg, float32(int(imgW/2-1)), ay, 2, 10, color.NRGBA{80, 80, 80, 255}, true)
+		barMid := (imgW - 8) / 2
+		barLen := float32(val) * barMid
+		barX := 4 + barMid
+		if barLen < 0 {
+			barX = barX + barLen
+			barLen = -barLen
 		}
-		vector.FillCircle(inputImg, cx, cy, r, col, true)
-		metrics := mainFont.Metrics()
-		txtW, _ := text.Measure(lbl, mainFont, 0)
-		scale := 0.5
-		op := &text.DrawOptions{}
-		op.GeoM.Translate(float64(cx)-float64(txtW)*scale/2, float64(cy)+float64(r)+metrics.HAscent*scale)
-		op.GeoM.Scale(scale, scale)
-		text.Draw(inputImg, lbl, mainFont, op)
-	}
-
-	btns := []struct {
-		btn     ebiten.GamepadButton
-		x, y, r float32
-		lbl     string
-	}{
-		{ebiten.GamepadButton0, 230, 80, 10, "A"},
-		{ebiten.GamepadButton1, 250, 60, 10, "B"},
-		{ebiten.GamepadButton2, 210, 60, 10, "X"},
-		{ebiten.GamepadButton3, 230, 40, 10, "Y"},
-		{ebiten.GamepadButton4, 80, 30, 10, "LB"},
-		{ebiten.GamepadButton5, 180, 30, 10, "RB"},
-		{ebiten.GamepadButton6, 80, 10, 10, "LT"},
-		{ebiten.GamepadButton7, 180, 10, 10, "RT"},
-		{ebiten.GamepadButton8, 120, 60, 10, "Back"},
-		{ebiten.GamepadButton9, 150, 60, 10, "Start"},
-		{ebiten.GamepadButton10, 60, 60, 6, "L3"},
-		{ebiten.GamepadButton11, 190, 90, 6, "R3"},
-		{ebiten.GamepadButton12, 80, 100, 8, "Up"},
-		{ebiten.GamepadButton13, 90, 110, 8, "Right"},
-		{ebiten.GamepadButton14, 80, 120, 8, "Down"},
-		{ebiten.GamepadButton15, 70, 110, 8, "Left"},
-	}
-	for _, b := range btns {
-		drawBtn(b.x, b.y, b.r, b.btn, b.lbl)
+		barCol := color.NRGBA{0, 150, 0, 255}
+		if math.Abs(float64(val)) < 0.01 {
+			barCol = color.NRGBA{60, 60, 60, 255}
+		}
+		vector.FillRect(inputImg, barX, ay+1, barLen, 8, barCol, true)
+		lblOp := &text.DrawOptions{}
+		lblOp.GeoM.Scale(0.35, 0.35)
+		lblOp.GeoM.Translate(float64(imgW-45), float64(ay+8))
+		text.Draw(inputImg, fmt.Sprintf("%d:%.2f", a, val), mainFont, lblOp)
 	}
 
 	inputImgItem.Dirty = true
@@ -389,25 +640,42 @@ func updateJoystickWindow() {
 	if axisCount != lastAxisCount {
 		updateStickOptions(axisCount)
 	}
-	axes := make([]string, axisCount)
-	for a := 0; a < axisCount; a++ {
-		axes[a] = fmt.Sprintf("%d:%.2f", a, ebiten.GamepadAxisValue(id, a))
-	}
-	axesText.Text = "Axes: " + strings.Join(axes, " ")
-	axesText.Dirty = true
 
 	buttonCount := ebiten.GamepadButtonCount(id)
-	pressed := []string{}
-	for b := 0; b < buttonCount; b++ {
-		if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton(b)) {
-			pressed = append(pressed, strconv.Itoa(b))
-		}
+	axesText.Text = fmt.Sprintf("Axes: %d  Buttons: %d", axisCount, buttonCount)
+	axesText.Dirty = true
+
+	// Show which sticks are mapped to which axes
+	walkInfo := "none"
+	if gs.JoystickWalkStick >= 0 {
+		walkInfo = fmt.Sprintf("Stick %d (axes %d,%d)", gs.JoystickWalkStick+1, gs.JoystickWalkStick*2, gs.JoystickWalkStick*2+1)
 	}
-	buttonsText.Text = "Pressed: " + strings.Join(pressed, " ")
+	cursorInfo := "none"
+	if gs.JoystickCursorStick >= 0 {
+		cursorInfo = fmt.Sprintf("Stick %d (axes %d,%d)", gs.JoystickCursorStick+1, gs.JoystickCursorStick*2, gs.JoystickCursorStick*2+1)
+	}
+	buttonsText.Text = fmt.Sprintf("Walk: %s  Cursor: %s", walkInfo, cursorInfo)
 	buttonsText.Dirty = true
 
 	btns := inpututil.AppendJustPressedGamepadButtons(id, nil)
 	if len(btns) > 0 {
+		if buttonTesterText != nil {
+			for _, btn := range btns {
+				num := int(btn)
+				name := joyButtonNames[btn]
+				if name != "" {
+					if display, ok := joyButtonDisplayNames[name]; ok {
+						buttonTesterText.Text = fmt.Sprintf("Last pressed: %s (button %d)", display, num)
+					} else {
+						buttonTesterText.Text = fmt.Sprintf("Last pressed: %s (button %d)", name, num)
+					}
+				} else {
+					buttonTesterText.Text = fmt.Sprintf("Last pressed: button %d", num)
+				}
+				buttonTesterText.Dirty = true
+			}
+		}
+
 		if click1Input != nil && click1Input.Focused {
 			if gs.JoystickBindings == nil {
 				gs.JoystickBindings = make(map[string]ebiten.GamepadButton)
@@ -436,4 +704,15 @@ func updateJoystickWindow() {
 	}
 
 	drawJoystickDisplay(id)
+}
+
+// joystickButtonByName converts a button name string (e.g., "a", "dpad_up")
+// to its ebiten gamepad button integer, or -1 if not found.
+func joystickButtonByName(name string) int {
+	for btn, n := range joyButtonNames {
+		if n == name {
+			return int(btn)
+		}
+	}
+	return -1
 }

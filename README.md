@@ -1,202 +1,140 @@
-# goThoom
+# goThoom (Macro Fork)
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/goThoom)](https://goreportcard.com/report/github.com/Distortions81/goThoom)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Distortions81/goThoom)](https://github.com/Distortions81/goThoom/releases)
+An alternate version of [goThoom](https://github.com/Distortions81/goThoom) by [Distortions81](https://github.com/Distortions81), an open-source client for the classic **[Clan Lord](https://www.deltatao.com/clanlord/)** MMORPG.
 
-An open-source (MIT) client for the classic **[Clan Lord](https://www.deltatao.com/clanlord/)** MMORPG
-
-Approximately 43,000 lines of Go code.
-
-Currently supports Macintosh, Windows and Linux via the [Ebiten](https://ebitengine.org/) library.
-
-Possible to add support for: FreeBSD, OpenBSD, Chrome, Firefox, Safari, Edge, Android, iOS, Nintendo Switch, Steam Deck, Xbox, PlayStation 5, Raspberry Pi, Steamworks.
-
-
-[Website Here](https://gothoom.xyz/)
-
-[Video Overview](https://youtu.be/MrGdcqIl3a4)
-
-<img width="125" height="125" alt="goThoom" src="https://github.com/user-attachments/assets/b036f99a-668b-408e-8a43-524a0659a260" />
-<img src="dev-screenshots/Screenshot_20250901_074853.png"/>
-
-> Status: actively developed, cross-platform builds provided in Releases.
+This fork builds on the original goThoom client with a focus on full Clan Lord macro system compatibility and quality-of-life improvements. All original features and credits belong to Distortions81.
 
 ---
 
-## Why I made this
+## Changes on top of the original goThoom
 
-- The windows client is finicky
-- 3 to 5 FPS with LCD popping/strobing effects are very hard to look at... I personally really struggle with motion sickness from it.
-- The art assets make heavy use of dithering that looked great on small CRTs but look entirely different (and unpleasant) on modern displays without filtering.
-- The game window not resizeable (547×540) and didn't look good or fit well on most screens even with OS/VM scaling
-- Quicktime MIDI is dead on modern OS X
-- Quicktime for Windows is unsupported past Windows 7 (last updated 2009) and is a real security risk
-- A number of security concerns with the old client
-- All existing (functioning) clients are single-platform and closed-source
-- Input schemes are odd or outdated
-- Macros seem to be manitory to keep up. Most available are ancient, difficult to find and require fiddling in a odd macro language
+### Full Clan Lord Macro System
 
-## What does goThoom offer?
+- File-based macro language with expressions, replacements, key/click/function macros
+- Variables (`@my.*`, `@selplayer.*`, `@env.*`, `@click.*`, `@text.*`, `@random`)
+- Flow control: `goto`, `if`/`else if`/`else`/`end if`, `random`/`end random`
+- Timing: `pause`, `timing`, `atime` with ack-frame synchronization
+- `set`/`setglobal` variables, `call` function macros
+- Case-insensitive file lookups (works on Linux)
+- Drop-in compatible with existing Clan Lord macro files
+- Macro hotkeys displayed in the Hotkeys UI with source file and line number attribution
 
-- Optional Interpolation for smooth movement at any frame-rate with a trade-off of more positional latency (animations and sounds are unaffected)
-- Texture processing that intelligently smooths dithering to restore a more CRT-like look to revive lurking color information and reduce popping/strobing effects when moving
-- Animation frame blending for a far smoother and pleasant experience that helps the existing animations look their best
-- High quality adjustable game window resizing that retains sharpness with very little artifacts
-- High quality audio resampling that is very flattering to the original recordings and more pleasant to the ear
-* Resampling: (1024-Phase 8192-Tap Lanczos Windowed-Sinc),
-* Bit depth conversion: TPDF noise shaping with 257 scaling for the best 8-bit to 16-bit conversion possible
-- Much higher quality music synthisizer that is more flexible (currently uses a 309MB soundfont file) that is not tied to a dead dependency.
-- Built-in local AI text-to-speech with a large choice of voices available online
-- Text rendering is anti-aliased and uses high quality modern fonts via OpenType and fractional font sizes are supported
-- Many-platform support: Windows, OS X, Linux and others are possible
-- Dark mode, light mode or fun colorful themes (even create your own)
-- Modern APIs: DirectX on Windows, Metal on OS X and Vulkan via Zink on Linux and even supports software rendering.
-* Use of Metal API is important because OpenGL support has been deprecated for ages on OS X and will be stuck at v4.1 and eventually removed.
-- Self-contained portable binary, no installers or external dependencies
-- Open-source and public domain to prevent it becoming unmaintained abandonware
-- Full Clan Lord client macro system: file-based macros with expressions, replacements, key/click/function macros, variables, flow control (goto, if/else-if/else, random), timing (pause/timingk/atimek), and env settings. Drop-in compatible with existing macro files.
-- Powerful scripting system using a common language, meaning most users will be able to seek support from LLMs.
-- Choices for more modern input schemes like enter-to-talk, WASD and use of non-fkeys
-* Modern laptops often do not support touchpad + keyboard simultaneously (palm rejection)
-* Many modern PCs only have 'media keys' and require you use a function key or mode switch to use. Some only offer touch-screen F-Keys or even no F-Keys at all!
+### Hotkey System Enhancements
+
+- Macro key/click bindings shown in the Hotkeys window (read-only, with source file:line)
+- Bindings refresh automatically on login and macro reload
+
+### UI Changes
+
+- "Combine chat + console" toggle now works correctly in both directions
+- WASD movement toggle in Settings > Interface (under Controls)
+- Gamepad settings button in Settings > Interface (under Controls)
+- Transparent window option with background color picker
+- "Reload Macros" in the Actions menu
+- "Untested Version" popup removed
+- Default timestamp format changed to match text logs (`1/2/06 3:04:05pm`)
+
+### Gamepad / Controller Support
+
+- Full gamepad input with per-stick walk and cursor movement
+- Configurable deadzones for both sticks
+- Button-to-command mapping (16 mappable buttons): enter a command like `/sit` or a macro function name
+- Click bindings (Click1/2/3) via gamepad buttons
+- Auto-sizing Gamepad window with visual controller layout
+- Visual controller display with:
+  - Controller body outline with grips
+  - Analog sticks with deadzone rings and live position dots (green = active, red = in deadzone)
+  - D-pad cross that lights up per direction
+  - ABXY face buttons in standard diamond layout
+  - LB/RB bumpers, LT/RT triggers, Start/Back, L3/R3
+  - Every button shows its name and ebiten button number
+  - Live axis bar gauges showing all axis values with center markers
+- Button tester: press any button and see its name + number for easy mapping
+- Stick mapping dropdowns auto-detect axis count from the connected controller
+- Auto-detection of controller connect/disconnect with refresh button
+
+### Text Logs
+
+- Text log files match the old ClanLord client format and location:
+  `Text Logs/<CharName>/CL Log YYYY-MM-DD HH.MM.SS.txt`
+- No session header or nested year/month subdirectories
+
+### Bug Fixes
+
+- Click macros (control-click, shift-click2, etc.) now fire correctly
+- Backward `goto` always yields (matches original ClanLaw client behavior)
+- `@env.textlog` macros work in `@login` (function macros default to unfriendly mode)
+- `macroGetKeyByName` handles hyphenated key names (e.g., `shift-right-click`)
+- `set`/`setglobal` variable names are not resolved as variables
+- `\r` stripping and escape processing in macro text
+- `maxCmdsPerFrame` safety limit for unfriendly mode
+
+### Auto-Update (Client Binary)
+
+- Checks GitHub releases (`maxtraxv3/goThoomMacro`) for newer semver-tagged releases
+- Prompts with "Update Now" / "Later" popup when a new version is found
+- Downloads the platform-appropriate binary, replaces the running executable, and restarts
+- Enabled only when built with `-ldflags "-X main.clientVersion=v1.0.0"` (set to your semver tag)
+- Disabled by default when `clientVersion` is `dev`
+
+### Game Asset Updates (CL_Images / CL_Sounds)
+
+- Game assets (images, sounds) are downloaded from the official Clan Lord servers (Delta Tao)
+- Incremental patching enabled by default (`-experimental`): downloads only the diff between your current version and the latest, saving bandwidth
+- Falls back to full archive download if incremental patch is unavailable
+- Skips download entirely if local files are already up to date or newer than the server version
+- Remote `versions.json` is checked at startup to get the actual latest CL version, so updates aren't held back by outdated game server responses
+
+---
+
+## Original goThoom Features
+
+All original features are preserved, including:
+
+- Smooth motion interpolation and animation frame blending
+- Texture processing for CRT-like dithering correction
+- High-quality audio resampling and music synthesis
+- Built-in AI text-to-speech
+- Dark/light/fun themes with custom palette support
+- WASD and modern input schemes
+- Scripting system via yaegi Go interpreter
+- Cross-platform: Windows, macOS, Linux
 
 ---
 
-## Download
-**Easiest:** grab the latest build from **Releases** on this repo (Windows, macOS, Linux).
-
-## Quick start
-- On first run, the client **auto-fetches missing game assets** (images, sounds) into `data/`. No manual wrangling.
-
-### Optional extras
-- **Background and splash images** – place `background.png` and/or `splash.png` in `data/` to override the default visuals.
-- **Sound font** – drop a `soundfont.sf2` file into `data/` to change the music instrument set. The Download Files window can fetch a suitable one.
-- **TTS voices** – voice archives (`.tar.gz`) or `.onnx` models with matching `.onnx.json` configs belong in `data/piper/voices`. Use `build-scripts/download_piper.sh` or the Download Files window to grab voices from online collections.
-
-### Custom themes and styles
-Themes live in `themes/palettes` and styles in `themes/styles`. On first run the client writes an `Example.json` palette and style plus a README explaining the format. Copy these files, adjust the colors or geometry, and select your new theme in Settings. With `eui.AutoReload = true` changes on disk are picked up automatically.
-
-### Text-to-speech voices
-Piper voices are stored in `data/piper/voices`. The client and `build-scripts/download_piper.sh` support voice archives in `.tar.gz` format and automatically extract and remove the archives. If a voice archive isn't available, the program falls back to downloading raw `.onnx` models with matching `.onnx.json` configs.
-
-### Downloading TTS files and soundfonts
-Use the **Download Files** window to fetch optional resources. The TTS option downloads the Piper binary and English voices for chat speech, while the soundfont enables higher quality music playback. Both boxes are checked by default and can be unchecked to skip their downloads.
-
-### Low-end hardware
-Enable **Potato GPU (low VRAM)** in Settings → Graphics if your system or driver only supports textures up to 4096×4096 pixels (for example, Raspberry Pi or very old GPUs). This mode uses smaller textures to avoid driver issues.
-
-## Using the UI
-
-- Windows: Click the `Windows` toolbar button to toggle common panels: Players, Inventory, Chat, Console, Help, Hotkeys, Shortcuts, Mixer, Settings, and more. Window layout and open/closed state persist between runs.
-- Actions: Use the `Actions` toolbar drop-down for Hotkeys, Shortcuts, Triggers, or Scripts. Dedicated buttons provide quick access to Settings, Help, Snapshot, Mixer, and Exit.
-- Movement: Left-click to walk, or use WASD/arrow keys (hold Shift to run). An optional "Click-to-Toggle Walk" sets a target with one click.
-- Input bar: Press Enter to type; press Enter again to send. Esc cancels. Up/Down browse history. While typing, Ctrl-V pastes and Ctrl-C copies the whole line. Right-click the input bar for Paste / Copy Line / Clear Line (Paste and Clear switch to typing mode and refresh immediately).
-- Chat/Console: Chat and Console are separate windows by default. Right-click any chat or console line to copy it; the line briefly highlights. You can merge chat into the console in Settings.
-- Inventory: Single-click selects. Double-click equips/unequips; Shift + double-click uses. Right-click an item for a context menu: Equip/Unequip, Examine, Show, Drop, Drop (Mine). If a shortcut is assigned to an item, its key appears like `[Q]` before the name.
-- Players: Single-click selects a player. Right-click a name for Thank, Curse, Anon Thank…, Anon Curse…, Share, Unshare, Info, Pull, or Push. Tags in the list: `>` sharing, `<` sharee, `*` same clan.
-- Mixer: Adjust Main/Game/Music/TTS volumes and enable/disable channels.
-- Quality: Pick a preset, or tweak motion smoothing, denoising, blending.
-
-Tip: The input bar auto-expands as you type and has a context menu for quick paste/copy/clear.
-
----
-
-## Scripts
-
-goThoom can load optional scripts at startup using [yaegi](https://github.com/traefik/yaegi), a Go interpreter.
-Place `.go` files inside the `scripts/` directory.
-
-### Testing server messages
-
-Use the `/testhooks` command to inject fake server messages for debugging or
-script development. Run `/testhooks help` to see available message names.
-
-```
-/testhooks MESSAGE [NAME] DATA
-```
-
-`MESSAGE` is a server message name like `share` or `info`. Supply `NAME`
-for messages referencing a mobile, and put the message body in `DATA`. Running
-`/testhooks` without arguments emits a few sample messages.
-
-Available message types:
-
-| Name | Tag | Description |
-|------|-----|-------------|
-| bard | ba | bard message |
-| backend | be | back-end command |
-| clan | cn | clan name |
-| config | cf | config |
-| nodisplay | dd | do not display |
-| demo | de | demo notice |
-| depart | dp | depart |
-| download | dl | download |
-| error | er | error message |
-| gm | gm | game master |
-| fallen | hf | has fallen |
-| notfallen | nf | no longer fallen |
-| info | in | info |
-| inventory | iv | inventory |
-| karma | ka | karma |
-| karmarecv | kr | karma received |
-| logoff | lf | log off |
-| logon | lg | log on |
-| location | lo | location |
-| multi | ml | multilingual |
-| monster | mn | monster name |
-| music | mu | music |
-| news | nw | news |
-| player | pn | player name |
-| share | sh | share |
-| unshare | su | unshare |
-| textlog | tl | text log only |
-| think | th | think |
-| mono | tt | monospaced style |
-| who | wh | who list |
-| youkilled | yk | you killed |
-
----
-## Build from source
+## Building
 
 1. Install system packages:
    ```bash
    sudo apt-get install -y build-essential libgl1-mesa-dev libglu1-mesa-dev \
      xorg-dev libxrandr-dev libasound2-dev libgtk-3-dev xdg-utils
    ```
-2. Install Go 1.26.3 from [go.dev](https://go.dev/dl/).
-3. Download Go modules:
+2. Install Go 1.26.5 from [go.dev](https://go.dev/dl/).
+3. Download and extract the prebuilt dependency bundle:
    ```bash
-   go mod download
+   curl -LO https://m45sci.xyz/u/dist/goThoom/gothoom_deps.tar.gz
+   tar -xzf gothoom_deps.tar.gz
    ```
-4. Build the client:
+4. Fetch Go modules and build:
    ```bash
+   cd gothoom
+   go mod download
    go build
    ```
-
-### Build with Docker (cross compile capable)
-
-A `Dockerfile` provides a reproducible cross-platform build environment.
-
-```bash
-./build-scripts/docker_dev_env.sh
-docker create --name gothoom-build gothoom-build-env
-mkdir -p dist
-docker cp gothoom-build:/out ./dist
-docker rm gothoom-build
-```
-
-The `dist/` directory will contain the compiled binaries.
-See [`docs/Docker.md`](docs/Docker.md) for details.
-
----
-
-## License
-
-MIT. Game assets and “Clan Lord” are property of their respective owners; this project ships **a client**, not server content.
+5. To enable auto-update, pass the version via ldflags:
+   ```bash
+   go build -ldflags "-s -w -X main.clientVersion=v1.0.0" -o gothoom .
+   ```
+   If `clientVersion` is left as the default (`dev`), auto-update is disabled.
 
 ---
 
 ## Credits
 
-Built in Go with a sprinkle of pragmatism and a lot of late-night packet spelunking. If you enjoy this, star the repo or link it.
+- Original goThoom client by [Distortions81](https://github.com/Distortions81) ([goThoom](https://github.com/Distortions81/goThoom))
+- Clan Lord is a trademark of Delta Tao Research Corporation
+- Built in Go with the [Ebiten](https://ebitengine.org/) game library
+
+## License
+
+MIT. Game assets and "Clan Lord" are property of their respective owners; this project ships a client, not server content.

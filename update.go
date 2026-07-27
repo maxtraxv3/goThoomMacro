@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,8 +21,8 @@ import (
 	"gothoom/clsnd"
 )
 
-const defaultUpdateBase = "https://m45sci.xyz/downloads/clanlord"
-const fallbackUpdateBase = "https://www.deltatao.com/downloads/clanlord"
+const defaultUpdateBase = "https://www.deltatao.com/downloads/clanlord"
+const fallbackUpdateBase = "https://m45sci.xyz/downloads/clanlord"
 const wasmUpdateBase = "https://gothoom.xyz/webgt"
 const soundFontURL = "https://m45sci.xyz/u/dist/goThoom/soundfont.sf2.gz"
 const soundFontFile = "soundfont.sf2"
@@ -358,6 +359,31 @@ func (pc *progCounter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+// fetchRemoteCLVersion fetches versions.json from the remote server and returns
+// the highest CLVersion found. Falls back to the embedded clVersion on error.
+func fetchRemoteCLVersion() int {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(versionsURL)
+	if err != nil {
+		return clVersion
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return clVersion
+	}
+	var vf versionFile
+	if err := json.NewDecoder(resp.Body).Decode(&vf); err != nil {
+		return clVersion
+	}
+	latest := clVersion
+	for _, v := range vf.Versions {
+		if v.CLVersion > latest {
+			latest = v.CLVersion
+		}
+	}
+	return latest
+}
+
 func autoUpdate(resp []byte, dataDir string) (int, error) {
 	if len(resp) < 16 {
 		return 0, fmt.Errorf("short response for update")
@@ -377,28 +403,41 @@ func autoUpdate(resp []byte, dataDir string) (int, error) {
 	logDebug("Client version: %v", clientVer)
 	imgVer := int(binary.BigEndian.Uint32(resp[8:12]) >> 8)
 	sndVer := int(binary.BigEndian.Uint32(resp[12:16]) >> 8)
-	bases := assetBases(base, updateBase, fallbackUpdateBase)
+	// Check the remote versions.json for the actual latest CL version,
+	// since some game servers lag behind the official release.
+	remoteCLVer := fetchRemoteCLVersion()
+	if remoteCLVer > imgVer {
+		imgVer = remoteCLVer
+	}
+	if remoteCLVer > sndVer {
+		sndVer = remoteCLVer
+	}
+	bases := assetBases(updateBase, fallbackUpdateBase, base)
 	imgPath := filepath.Join(dataDir, CL_ImagesFile)
 	var imgOld int
 	if old, err := readKeyFileVersion(imgPath); err == nil {
 		imgOld = int(old >> 8)
 	}
 	var err error
-	for _, b := range bases {
-		if imgOld > 0 && experimental {
-			patchURL := fmt.Sprintf("%v/data/CL_Images.%dto%d.gz", b, imgOld, imgVer)
-			if err = downloadPatch(patchURL, imgPath, climg.ApplyPatch); err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					imgURL := fmt.Sprintf("%v/data/CL_Images.%d.gz", b, imgVer)
-					err = downloadGZ(imgURL, imgPath)
+	if imgOld >= imgVer {
+		logDebug("CL_Images already up to date (v%d >= v%d)", imgOld, imgVer)
+	} else {
+		for _, b := range bases {
+			if imgOld > 0 && experimental {
+				patchURL := fmt.Sprintf("%v/data/CL_Images.%dto%d.gz", b, imgOld, imgVer)
+				if err = downloadPatch(patchURL, imgPath, climg.ApplyPatch); err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						imgURL := fmt.Sprintf("%v/data/CL_Images.%d.gz", b, imgVer)
+						err = downloadGZ(imgURL, imgPath)
+					}
 				}
+			} else {
+				imgURL := fmt.Sprintf("%v/data/CL_Images.%d.gz", b, imgVer)
+				err = downloadGZ(imgURL, imgPath)
 			}
-		} else {
-			imgURL := fmt.Sprintf("%v/data/CL_Images.%d.gz", b, imgVer)
-			err = downloadGZ(imgURL, imgPath)
-		}
-		if err == nil {
-			break
+			if err == nil {
+				break
+			}
 		}
 	}
 	if err != nil {
@@ -410,21 +449,25 @@ func autoUpdate(resp []byte, dataDir string) (int, error) {
 	if old, err := readKeyFileVersion(sndPath); err == nil {
 		sndOld = int(old >> 8)
 	}
-	for _, b := range bases {
-		if sndOld > 0 && experimental {
-			patchURL := fmt.Sprintf("%v/data/CL_Sounds.%dto%d.gz", b, sndOld, sndVer)
-			if err = downloadPatch(patchURL, sndPath, clsnd.ApplyPatch); err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					sndURL := fmt.Sprintf("%v/data/CL_Sounds.%d.gz", b, sndVer)
-					err = downloadGZ(sndURL, sndPath)
+	if sndOld >= sndVer {
+		logDebug("CL_Sounds already up to date (v%d >= v%d)", sndOld, sndVer)
+	} else {
+		for _, b := range bases {
+			if sndOld > 0 && experimental {
+				patchURL := fmt.Sprintf("%v/data/CL_Sounds.%dto%d.gz", b, sndOld, sndVer)
+				if err = downloadPatch(patchURL, sndPath, clsnd.ApplyPatch); err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						sndURL := fmt.Sprintf("%v/data/CL_Sounds.%d.gz", b, sndVer)
+						err = downloadGZ(sndURL, sndPath)
+					}
 				}
+			} else {
+				sndURL := fmt.Sprintf("%v/data/CL_Sounds.%d.gz", b, sndVer)
+				err = downloadGZ(sndURL, sndPath)
 			}
-		} else {
-			sndURL := fmt.Sprintf("%v/data/CL_Sounds.%d.gz", b, sndVer)
-			err = downloadGZ(sndURL, sndPath)
-		}
-		if err == nil {
-			break
+			if err == nil {
+				break
+			}
 		}
 	}
 	if err != nil {

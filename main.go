@@ -79,7 +79,7 @@ func main() {
 	flag.BoolVar(&sndDump, "sndDump", false, "dump sounds to dump/snd as WAV")
 	flag.BoolVar(&dumpBEPPTags, "dumpBEPPTags", false, "log BEPP tags seen (for empirical analysis)")
 	flag.BoolVar(&musicDebug, "musicDebug", false, "show bard music messages in chat")
-	flag.BoolVar(&experimental, "experimental", false, "enable experimental features like CL_Images/CL_Sounds patching")
+	flag.BoolVar(&experimental, "experimental", true, "enable incremental CL_Images/CL_Sounds patching (smaller downloads)")
 	flag.BoolVar(&showUIScale, "uiscale", false, "show UI scaling options")
 	flag.BoolVar(&measureLoads, "measure", false, "report asset load times and metadata (sounds/images)")
 	genPGO := flag.Bool("pgo", false, "create default.pgo using test.clMov at 30 fps for 30s")

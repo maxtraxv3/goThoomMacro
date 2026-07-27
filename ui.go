@@ -338,6 +338,7 @@ func buildToolbar(toolFontSize, buttonWidth, buttonHeight float32) *eui.ItemData
 			"Triggers",
 			"Scripts",
 			"Saved Data",
+			"Reload Macros",
 		}
 		eui.ShowContextMenu(options, r.X0, r.Y1, func(i int) {
 			switch i {
@@ -355,6 +356,8 @@ func buildToolbar(toolFontSize, buttonWidth, buttonHeight float32) *eui.ItemData
 			case 4:
 				makeSavedDataWindow()
 				savedDataWin.ToggleNear(actionsBtn)
+			case 5:
+				macroReload()
 			}
 		})
 	}
@@ -2390,19 +2393,7 @@ func startLogin() {
 		return
 	}
 	if status.Version > 0 && clVersion < status.Version {
-		msg := fmt.Sprintf("goThoom is only tested with version %d, it may still work with version %d.", clVersion, status.Version)
-		showPopup(
-			"Untested Version",
-			msg,
-			[]popupButton{
-				{Text: "Cancel"},
-				{Text: "Proceed", Color: &eui.ColorGray, Action: func() {
-					clVersion = status.Version
-					//startLogin()
-				}},
-			},
-		)
-		return
+		clVersion = status.Version
 	}
 
 	loginWin.Close()
@@ -3070,6 +3061,49 @@ func makeSettingsWindow() {
 	}
 	left.AddItem(toggle)
 
+	wasdCB, wasdEvents := eui.NewCheckbox()
+	wasdCB.Text = "WASD Movement"
+	wasdCB.Size = eui.Point{X: panelWidth, Y: 24}
+	wasdCB.Checked = gs.KeyboardMovement
+	wasdCB.SetTooltip("Enable WASD keys to walk and run.")
+	wasdEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			defer SettingsLock.Unlock()
+			gs.KeyboardMovement = ev.Checked
+			settingsDirty = true
+		}
+	}
+	left.AddItem(wasdCB)
+
+	keySpeedSlider, keySpeedEvents := eui.NewSlider()
+	keySpeedSlider.Label = "Keyboard Walk Speed"
+	keySpeedSlider.MinValue = 0.1
+	keySpeedSlider.MaxValue = 1.0
+	keySpeedSlider.Value = float32(gs.KBWalkSpeed)
+	keySpeedSlider.Size = eui.Point{X: panelWidth - 10, Y: 24}
+	keySpeedEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventSliderChanged {
+			SettingsLock.Lock()
+			defer SettingsLock.Unlock()
+			gs.KBWalkSpeed = float64(ev.Value)
+			settingsDirty = true
+		}
+	}
+	left.AddItem(keySpeedSlider)
+
+	joystickBtn, joystickEvents := eui.NewButton()
+	joystickBtn.Text = "Gamepad"
+	joystickBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	joystickEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			SettingsLock.Lock()
+			defer SettingsLock.Unlock()
+			joystickWin.ToggleNear(ev.Item)
+		}
+	}
+	left.AddItem(joystickBtn)
+
 	label, _ = eui.NewText()
 	label.Text = "\nQuality Options:"
 	label.FontSize = 15
@@ -3161,7 +3195,11 @@ func makeSettingsWindow() {
 			if ev.Checked {
 				if chatWin != nil {
 					chatWin.Close()
+					chatWin = nil
+					chatList = nil
 				}
+			} else {
+				_ = makeChatWindow()
 			}
 		}
 	}
@@ -4800,33 +4838,40 @@ func makeAdvancedSettingsWindow() {
 	}
 	interfaceCol.AddItem(pinLocCB)
 
-	keySpeedSlider, keySpeedEvents := eui.NewSlider()
-	keySpeedSlider.Label = "Keyboard Walk Speed"
-	keySpeedSlider.MinValue = 0.1
-	keySpeedSlider.MaxValue = 1.0
-	keySpeedSlider.Value = float32(gs.KBWalkSpeed)
-	keySpeedSlider.Size = eui.Point{X: columnWidth - 10, Y: 24}
-	keySpeedEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventSliderChanged {
+	transparentCB, transparentEvents := eui.NewCheckbox()
+	transparentCB.Text = "Transparent Window"
+	transparentCB.Size = eui.Point{X: columnWidth, Y: 24}
+	transparentCB.Checked = gs.TransparentWindow
+	transparentCB.SetTooltip("Make the game window transparent (requires restart).")
+	transparentEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
 			SettingsLock.Lock()
 			defer SettingsLock.Unlock()
-			gs.KBWalkSpeed = float64(ev.Value)
+			gs.TransparentWindow = ev.Checked
 			settingsDirty = true
 		}
 	}
-	interfaceCol.AddItem(keySpeedSlider)
+	interfaceCol.AddItem(transparentCB)
 
-	joystickBtn, joystickEvents := eui.NewButton()
-	joystickBtn.Text = "Gamepad"
-	joystickBtn.Size = eui.Point{X: columnWidth, Y: 24}
-	joystickEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
+	bgColorLabel, _ := eui.NewText()
+	bgColorLabel.Text = "Background Color"
+	bgColorLabel.FontSize = 12
+	bgColorLabel.Size = eui.Point{X: columnWidth, Y: 20}
+	interfaceCol.AddItem(bgColorLabel)
+
+	bgColorWheel, bgColorEvents := eui.NewColorWheel()
+	bgColorWheel.Size = eui.Point{X: columnWidth, Y: 40}
+	bgColorWheel.WheelColor = gs.WindowBGColor
+	bgColorEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventColorChanged {
 			SettingsLock.Lock()
 			defer SettingsLock.Unlock()
-			joystickWin.ToggleNear(ev.Item)
+			gs.WindowBGColor = bgColorWheel.WheelColor
+			updateDimmedScreenBG()
+			settingsDirty = true
 		}
 	}
-	interfaceCol.AddItem(joystickBtn)
+	interfaceCol.AddItem(bgColorWheel)
 
 	addSectionLabel(interfaceCol, "Visual Tweaks")
 

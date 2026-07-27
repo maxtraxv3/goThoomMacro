@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,6 +116,10 @@ func checkForNewVersion() {
 	gs.LastUpdateCheck = time.Now()
 	settingsDirty = true
 
+	// Check for client fork updates from GitHub.
+	checkClientUpdate()
+
+	// Also check for upstream goThoom game version updates.
 	resp, err := http.Get(versionsURL)
 	if err != nil {
 		log.Printf("check new version: %v", err)
@@ -142,7 +145,7 @@ func checkForNewVersion() {
 		}
 	}
 	if latest.Version > appVersion {
-		consoleMessage(fmt.Sprintf("New goThoom version %d available", latest.Version))
+		consoleMessage(fmt.Sprintf("New game data version %d available", latest.Version))
 		if tcpConn != nil {
 			if gs.NotifiedVersion >= latest.Version {
 				return
@@ -153,7 +156,7 @@ func checkForNewVersion() {
 				for !uiReady {
 					time.Sleep(100 * time.Millisecond)
 				}
-				showNotification(fmt.Sprintf("goThoom version %d is available!", ver))
+				showNotification(fmt.Sprintf("Game data version %d is available!", ver))
 			}(latest.Version)
 			return
 		}
@@ -164,20 +167,19 @@ func checkForNewVersion() {
 				time.Sleep(100 * time.Millisecond)
 			}
 			showPopup(
-				"Update Available",
-				fmt.Sprintf("goThoom version %d is available!", ver),
+				"Game Data Update",
+				fmt.Sprintf("Game data version %d is available!", ver),
 				[]popupButton{
-					{Text: "Cancel"},
+					{Text: "Later"},
 					{Text: "Download", Action: func() {
 						browser.OpenURL("https://github.com/Distortions81/goThoom/releases")
-						os.Exit(0)
 					}},
 				},
 			)
 		}(latest.Version)
 		return
 	}
-	consoleMessage("This version of goThoom is the latest version!")
+	consoleMessage("Game data is up to date!")
 }
 
 func versionCheckLoop() {

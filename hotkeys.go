@@ -404,6 +404,35 @@ func refreshHotkeysList() {
 		hotkeysList.AddItem(row)
 	}
 
+	// Macro key/click bindings (read-only, sourced from loaded macro files)
+	macroState.mu.Lock()
+	macroBindings := macroGetBindings()
+	macroState.mu.Unlock()
+	if len(macroBindings) > 0 {
+		macroLabel := &eui.ItemData{ItemType: eui.ITEM_TEXT, Text: "Macro Bindings", Fixed: true}
+		macroLabel.Size = eui.Point{X: 480, Y: 20}
+		macroLabel.FontSize = 10
+		hotkeysList.AddItem(macroLabel)
+		for _, mb := range macroBindings {
+			row := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL, Fixed: true}
+			row.Size = eui.Point{X: 480, Y: 20}
+			text := mb.Combo
+			if mb.BodyHint != "" {
+				text += " -> " + mb.BodyHint
+			}
+			src := mb.Source
+			if mb.LineNum > 0 {
+				src += ":" + strconv.Itoa(mb.LineNum)
+			}
+			text += "  (" + src + ")"
+			lbl := &eui.ItemData{ItemType: eui.ITEM_TEXT, Text: text, Fixed: true}
+			lbl.Size = eui.Point{X: 480, Y: 20}
+			lbl.FontSize = 10
+			row.AddItem(lbl)
+			hotkeysList.AddItem(row)
+		}
+	}
+
 	hotkeysList.Dirty = true
 	if hotkeysWin != nil {
 		hotkeysWin.Refresh()

@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -409,3 +411,123 @@ var (
 
 // Macro random state
 var macroRandomState int
+
+// macroCodeToName maps macro key/click codes back to human-readable names.
+var macroCodeToName = map[int]string{
+	0x1B: "Escape",
+	0x0105: "F1", 0x0106: "F2", 0x0107: "F3", 0x0108: "F4",
+	0x0109: "F5", 0x010A: "F6", 0x010B: "F7", 0x010C: "F8",
+	0x010D: "F9", 0x010E: "F10", 0x010F: "F11", 0x0110: "F12",
+	0x0111: "F13", 0x0112: "F14", 0x0113: "F15", 0x0114: "F16",
+	'-':    "Minus",
+	0x08:   "Delete",
+	'\t':    "Tab",
+	0x0D:   "Return",
+	' ':    "Space",
+	0x05:   "Help",
+	0x01:   "Home",
+	0x0B:   "PageUp",
+	0x7F:   "Del",
+	0x04:   "End",
+	0x0C:   "PageDown",
+	0x1E:   "Up",
+	0x1F:   "Down",
+	0x1C:   "Left",
+	0x1D:   "Right",
+	0x03:   "Enter",
+	1024:   "Click",
+	1025:   "RightClick",
+	1026:   "MiddleClick",
+	1027:   "Click4", 1028: "Click5",
+	1029:   "Click6", 1030: "Click7", 1031: "Click8",
+	2048:   "WheelUp",
+	2049:   "WheelDown",
+	2050:   "WheelLeft",
+	2051:   "WheelRight",
+}
+
+// macroModBitToName maps modifier bit values to human-readable names.
+var macroModBitToName = map[uint]string{
+	0x0001: "Shift",
+	0x0002: "Control",
+	0x0004: "Command",
+	0x0008: "Option",
+	0x0020: "Numpad",
+}
+
+// MacroBinding describes a single key or click macro binding for display.
+type MacroBinding struct {
+	Combo    string // human-readable combo, e.g. "Ctrl+F1"
+	Source   string // source file basename
+	LineNum  int
+	BodyHint string // first command in the macro body (e.g. "/action")
+}
+
+// macroGetComboName converts a macro key code + modifier bitmask to a
+// human-readable combo string like "Ctrl+Shift+F1".
+func macroGetComboName(keyCode int, mods uint) string {
+	var parts []string
+	// Add modifiers in a stable order
+	for _, bit := range []uint{0x0002, 0x0001, 0x0008, 0x0004, 0x0020} {
+		if mods&bit != 0 {
+			parts = append(parts, macroModBitToName[bit])
+		}
+	}
+	name := macroCodeToName[keyCode]
+	if name == "" {
+		name = fmt.Sprintf("Key(%d)", keyCode)
+	}
+	parts = append(parts, name)
+	return strings.Join(parts, "+")
+}
+
+// macroGetBodyHint returns a short description of the first command in a macro body.
+func macroGetBodyHint(cmds *Macro) string {
+	if cmds == nil {
+		return ""
+	}
+	if cmds.CommandKind == cmdText {
+		s := cmds.VarName
+		for _, p := range cmds.Params {
+			s += " " + p.VarName
+		}
+		if len(s) > 40 {
+			s = s[:40] + "..."
+		}
+		return s
+	}
+	return ""
+}
+
+// macroGetBindings returns all loaded key and click macro bindings.
+// Must be called with macroState.mu held or during single-threaded init.
+func macroGetBindings() []MacroBinding {
+	var bindings []MacroBinding
+	for m := macroState.Keys; m != nil; m = m.Next {
+		combo := macroGetComboName(m.Key, m.Modifiers)
+		src := filepath.Base(m.FileName2)
+		if src == "." || src == "" {
+			src = "?"
+		}
+		bindings = append(bindings, MacroBinding{
+			Combo:    combo,
+			Source:   src,
+			LineNum:  m.LineNum,
+			BodyHint: macroGetBodyHint(m.Commands),
+		})
+	}
+	for m := macroState.Clicks; m != nil; m = m.Next {
+		combo := macroGetComboName(m.Key, m.Modifiers)
+		src := filepath.Base(m.FileName2)
+		if src == "." || src == "" {
+			src = "?"
+		}
+		bindings = append(bindings, MacroBinding{
+			Combo:    combo,
+			Source:   src,
+			LineNum:  m.LineNum,
+			BodyHint: macroGetBodyHint(m.Commands),
+		})
+	}
+	return bindings
+}

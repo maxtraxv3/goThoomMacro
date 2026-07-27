@@ -64,16 +64,22 @@ var dimmedScreenBG = color.RGBA{0, 0, 0, 255}
 
 func updateDimmedScreenBG() {
 	c := color.RGBA{0, 0, 0, 255}
-	if gameWin != nil && gameWin.Theme != nil {
+	if !gs.TransparentWindow {
+		c = color.RGBA(gs.WindowBGColor)
+	} else if gameWin != nil && gameWin.Theme != nil {
 		if tc := color.RGBA(gameWin.Theme.Window.BGColor); tc.A > 0 {
 			c = tc
 		}
+	}
+	a := uint8(255)
+	if gs.TransparentWindow {
+		a = 0
 	}
 	dimmedScreenBG = color.RGBA{
 		R: uint8(uint16(c.R) / 2),
 		G: uint8(uint16(c.G) / 2),
 		B: uint8(uint16(c.B) / 2),
-		A: 255,
+		A: a,
 	}
 }
 
@@ -659,6 +665,25 @@ func (g *Game) Update() error {
 		if b, ok := gs.JoystickBindings["click3"]; ok {
 			joyClick3 = inpututil.IsGamepadButtonJustPressed(id, b)
 		}
+		// Execute mapped button commands
+		if gs.JoystickCommands != nil && !inputActive && !typingElsewhere {
+			for name, cmd := range gs.JoystickCommands {
+				if cmd == "" {
+					continue
+				}
+				btn := joystickButtonByName(name)
+				if btn < 0 {
+					continue
+				}
+				if inpututil.IsGamepadButtonJustPressed(id, ebiten.GamepadButton(btn)) {
+					if strings.HasPrefix(strings.TrimSpace(cmd), "/") || strings.ContainsAny(cmd, " \r\n") {
+						enqueueCommand(strings.TrimSpace(cmd))
+					} else {
+						macroExecFunc(cmd)
+					}
+				}
+			}
+		}
 	}
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) || joyClick2 {
@@ -982,7 +1007,7 @@ func (g *Game) Update() error {
 	/* WASD / ARROWS */
 
 	var keyWalk bool
-	if focused && !inputActive && !typingElsewhere {
+	if focused && !inputActive && !typingElsewhere && gs.KeyboardMovement {
 		dx, dy := 0, 0
 		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
 			dx--
@@ -2662,7 +2687,7 @@ func runGame(ctx context.Context) {
 	}
 	ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
 
-	op := &ebiten.RunGameOptions{ScreenTransparent: false}
+	op := &ebiten.RunGameOptions{ScreenTransparent: gs.TransparentWindow}
 	if err := ebiten.RunGameWithOptions(&Game{}, op); err != nil {
 		log.Printf("ebiten: %v", err)
 	}

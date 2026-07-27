@@ -70,7 +70,7 @@ func appendTextLog(msg string) {
 }
 
 // ensureTextLog initializes the legacy Text Log path matching old_mac_client.
-// Path: "Text Logs/<CharName>/CL Log YYYY/MM/DD HH.MM.SS.txt"
+// Path: "Text Logs/<CharName>/CL Log YYYY-MM-DD HH.MM.SS.txt"
 func ensureTextLog() {
 	if isWASM {
 		textLogPath = ""
@@ -113,22 +113,13 @@ func ensureTextLog() {
 	charDir := filepath.Join(base, desired)
 
 	now := time.Now()
-	year := fmt.Sprintf("%04d", now.Year())
-	month := fmt.Sprintf("%02d", int(now.Month()))
-	day := fmt.Sprintf("%02d", now.Day())
-	timeName := fmt.Sprintf("%s %02d.%02d.%02d.txt", day, now.Hour(), now.Minute(), now.Second())
-	yearMonthDir := filepath.Join(charDir, "CL Log "+year, month)
+	fileName := fmt.Sprintf("CL Log %04d-%02d-%02d %02d.%02d.%02d.txt",
+		now.Year(), int(now.Month()), now.Day(),
+		now.Hour(), now.Minute(), now.Second())
 
-	if err := os.MkdirAll(yearMonthDir, 0o755); err != nil {
+	if err := os.MkdirAll(charDir, 0o755); err != nil {
 		return
 	}
-	textLogPath = filepath.Join(yearMonthDir, timeName)
+	textLogPath = filepath.Join(charDir, fileName)
 	textLogChar = desired
-
-	// Optional session marker at rotation
-	f, err := os.OpenFile(textLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err == nil {
-		_, _ = f.WriteString(fmt.Sprintf("=== Session started %s as %s ===\n", now.Format(time.RFC3339), textLogChar))
-		_ = f.Close()
-	}
 }

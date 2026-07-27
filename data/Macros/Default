@@ -1,0 +1,14 @@
+// Default macros - included by all character macro files
+// These are shorthand expression macros for common commands.
+
+"??"    "/help "    @text "\r"
+"aa"    "/action "  @text "\r"
+"gg"    "/give "    @text "\r"
+"ii"    "/info "    @text "\r"
+"mm"    "/money\r"
+"pp"    "/ponder "  @text "\r"
+"rr"    "/report "  @text "\r"
+"ss"    "/speak "   @text "\r"
+"tt"    "/think "   @text "\r"
+"ww"    "/whisper " @text "\r"
+"yy"    "/yell "    @text "\r"

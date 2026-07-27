@@ -88,6 +88,9 @@ var gsdef settings = settings{
 	MiddleClickMoveWindow:   false,
 	InputBarAlwaysOpen:      false,
 	KBWalkSpeed:             0.25,
+	KeyboardMovement:        false,
+	TransparentWindow:       true,
+	WindowBGColor:           eui.NewColor(0, 0, 0, 255),
 	MainFontSize:            8,
 	BubbleFontSize:          15,
 	ConsoleFontSize:         12,
@@ -174,7 +177,7 @@ var gsdef settings = settings{
 	PromptDisableShaders:  true,
 	ChatTimestamps:        false,
 	ConsoleTimestamps:     false,
-	TimestampFormat:       "3:04PM",
+	TimestampFormat:       "1/2/06 3:04:05pm",
 	LastUpdateCheck:       time.Time{},
 	NotifiedVersion:       0,
 	WindowTiling:          false,
@@ -238,6 +241,9 @@ type settings struct {
 	MiddleClickMoveWindow bool
 	InputBarAlwaysOpen    bool
 	KBWalkSpeed           float64
+	KeyboardMovement      bool
+	TransparentWindow     bool
+	WindowBGColor         eui.Color
 	MainFontSize          float64
 	BubbleFontSize        float64
 	ConsoleFontSize       float64
@@ -342,6 +348,7 @@ type settings struct {
 
 	JoystickEnabled        bool
 	JoystickBindings       map[string]ebiten.GamepadButton
+	JoystickCommands       map[string]string
 	JoystickWalkStick      int
 	JoystickCursorStick    int
 	JoystickWalkDeadzone   float64

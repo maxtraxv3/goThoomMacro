@@ -36,7 +36,7 @@ build_wasm() {
     CGO_ENABLED=0 \
     go build \
       -trimpath \
-      -ldflags "-s -w" \
+      -ldflags "-s -w -X main.clientVersion=${CLIENT_VERSION:-dev}" \
       -o "$wasm_out" .
 
   local goroot
@@ -200,6 +200,8 @@ for platform in "${platforms[@]}"; do
   ZIP_NAME="${FRIENDLY}.zip"
   TAGS=""
   LDFLAGS="-s -w"
+  CLIENT_VERSION="${CLIENT_VERSION:-dev}"
+  LDFLAGS="$LDFLAGS -X main.clientVersion=$CLIENT_VERSION"
 
   if [ "$GOOS" = "windows" ]; then
     BIN_NAME+=".exe"

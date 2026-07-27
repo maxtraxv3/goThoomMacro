@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,6 +151,7 @@ func macroReload() {
 
 	macroStopAll()
 	macroLoadCharacter(charName)
+	refreshHotkeysList()
 	macroShowInfo("Macros reloaded", true)
 }
 
@@ -187,6 +189,40 @@ func macroExecLogin() {
 		}
 	}
 	logWarn("[macro] no @login function found")
+}
+
+// macroExecFunc executes a function macro by name (without the @ prefix).
+func macroExecFunc(name string) {
+	if !strings.HasPrefix(name, "@") {
+		name = "@" + name
+	}
+	macroState.mu.Lock()
+	defer macroState.mu.Unlock()
+	for m := macroState.Functions; m != nil; m = m.Next {
+		if m.Name == name {
+			ex := macroStart(m, macroFunction, "")
+			for {
+				if macroContinueOne(ex) {
+					macroFinish(ex)
+					if macroState.Executing == ex {
+						macroState.Executing = ex.Next
+					}
+					break
+				}
+				if ex.Buffer != "" && strings.Contains(ex.Buffer, "\r") {
+					cmd := strings.Split(ex.Buffer, "\r")[0]
+					if cmd != "" {
+						enqueueCommand(cmd)
+					}
+					ex.Buffer = ""
+					continue
+				}
+				break
+			}
+			return
+		}
+	}
+	macroShowInfo(fmt.Sprintf("macro function %q not found", name), false)
 }
 
 // macroFindExpressionMacro finds an expression macro matching the given text.

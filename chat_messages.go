@@ -71,7 +71,7 @@ func chatMessage(msg string) {
 func getChatMessages() []string {
 	format := gs.TimestampFormat
 	if format == "" {
-		format = "3:04PM"
+		format = "1/2/06 3:04:05pm"
 	}
 	return chatLog.Entries(format, gs.ChatTimestamps)
 }
