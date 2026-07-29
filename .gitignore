@@ -46,3 +46,8 @@ binaries/goThoom-Web/
 .gomodcache_tmp/*
 .cache/
 go/.gomodcache_tmp/
+build/
+logs/
+dev-screenshots/
+/data/Macros/
+-l

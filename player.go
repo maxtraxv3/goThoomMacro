@@ -66,7 +66,7 @@ func getPlayer(name string) *Player {
 	}
 	p = &Player{Name: name}
 	players[name] = p
-	playersDirty = true
+	playersDirty.Store(true)
 	return p
 }
 
@@ -102,7 +102,7 @@ func updatePlayerAppearance(name string, pictID uint16, colors []byte, isNPC boo
 	}
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	if seenChanged || prevSC != p.SameClan {
 		playersPersistDirty = true
 	}

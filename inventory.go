@@ -58,7 +58,7 @@ func resetInventory() {
 	inventoryItems = inventoryItems[:0]
 	inventoryNames = make(map[inventoryKey]string)
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }
 
 // rebuildInventoryIndices recalculates sequential display indices for all
@@ -126,7 +126,7 @@ func addInventoryItem(id uint16, idx int, name string, equip bool) {
 		}
 	}
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }
 
 func removeInventoryItem(id uint16, idx int) {
@@ -168,7 +168,7 @@ func removeInventoryItem(id uint16, idx int) {
 		rebuildInventoryIndices()
 	}
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }
 
 func equipInventoryItem(id uint16, idx int, equip bool) {
@@ -214,7 +214,7 @@ func equipInventoryItem(id uint16, idx int, equip bool) {
 		}
 	}
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }
 
 // queueEquipCommand enqueues the server command to equip an item. The server
@@ -344,7 +344,7 @@ func renameInventoryItem(id uint16, idx int, name string) {
 		}
 	}
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }
 
 func getInventory() []InventoryItem {
@@ -473,5 +473,5 @@ func setFullInventory(ids []uint16, equipped []bool) {
 	inventoryItems = grouped
 	inventoryNames = newNames
 	inventoryMu.Unlock()
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 }

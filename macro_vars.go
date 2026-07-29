@@ -187,6 +187,31 @@ func macroGetClickVar(subfield string) (string, bool) {
 	return "", false
 }
 
+// macroResolveBrackets resolves [expr] patterns in a variable name.
+// Each expr is looked up as a variable and replaced with its value.
+// The brackets themselves are preserved. If the expr is not found as a
+// variable, the literal text inside brackets is kept as-is.
+// For example, name[thnka] with thnka=3 becomes name[3].
+func macroResolveBrackets(name string) string {
+	for {
+		start := strings.IndexByte(name, '[')
+		if start < 0 {
+			return name
+		}
+		end := strings.IndexByte(name[start:], ']')
+		if end < 0 {
+			return name
+		}
+		end += start
+		inner := name[start+1 : end]
+		val, ok := macroFindGlobalVariable(inner)
+		if !ok {
+			return name
+		}
+		name = name[:start+1] + val + name[end:]
+	}
+}
+
 // macroGetUserVariable resolves a user-defined variable (local first, then global).
 func macroGetUserVariable(name string) (string, bool) {
 	// Check local variables of the currently executing macro
@@ -198,6 +223,7 @@ func macroGetUserVariable(name string) (string, bool) {
 
 // macroFindGlobalVariable finds a variable in the global variable list.
 func macroFindGlobalVariable(name string) (string, bool) {
+	name = macroResolveBrackets(name)
 	for m := macroState.GlobalVars; m != nil; m = m.Next {
 		if m.VarName == name {
 			return m.VarValue, true
@@ -208,6 +234,7 @@ func macroFindGlobalVariable(name string) (string, bool) {
 
 // macroSetVariable sets a variable value (local if in a macro context, global otherwise).
 func macroSetVariable(name, value string, global bool) {
+	name = macroResolveBrackets(name)
 	if global {
 		macroSetGlobalVariable(name, value)
 	} else {
@@ -224,6 +251,7 @@ func macroSetGlobalVariable(name, value string) {
 	}
 	// Resolve the value (handle variable references and quotes)
 	resolved := macroResolveExpr(value)
+	name = macroResolveBrackets(name)
 	// Find or create
 	for m := macroState.GlobalVars; m != nil; m = m.Next {
 		if m.VarName == name {
@@ -242,6 +270,7 @@ func macroSetGlobalVariable(name, value string) {
 // macroSetLocalVariable sets a variable in the executing macro's local scope.
 func macroSetLocalVariable(ex *ExecutingMacro, name, value string) {
 	resolved := macroResolveExpr(value)
+	name = macroResolveBrackets(name)
 	// Find or create in local vars
 	for m := ex.Vars; m != nil; m = m.Next {
 		if m.VarName == name {
@@ -264,6 +293,7 @@ func macroGetLocalVariable(ex *ExecutingMacro, name string) (string, bool) {
 	if newName, ok := obsoleteVarRemap[name]; ok {
 		name = newName
 	}
+	name = macroResolveBrackets(name)
 	// Local scope first
 	for m := ex.Vars; m != nil; m = m.Next {
 		if m.VarName == name {
@@ -387,7 +417,7 @@ func macroResolveTextOp(ex *ExecutingMacro, expr string) string {
 func macroGetEquippedItemName(slot int) string {
 	items := getInventory()
 	if clImages == nil {
-		return ""
+		return "Nothing"
 	}
 	for _, it := range items {
 		if !it.Equipped {
@@ -397,7 +427,7 @@ func macroGetEquippedItemName(slot int) string {
 			return it.Name
 		}
 	}
-	return ""
+	return "Nothing"
 }
 
 // macroGetEquipmentSlotVar returns the equipped item name for a player variable ID.

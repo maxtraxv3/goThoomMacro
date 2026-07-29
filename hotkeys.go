@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gothoom/eui"
@@ -31,6 +32,9 @@ type Hotkey struct {
 	Commands []HotkeyCommand `json:"commands"`
 	Script   string          `json:"script,omitempty"`
 	Disabled bool            `json:"disabled,omitempty"`
+	// ConflictDisabled is set at runtime when this hotkey's combo conflicts
+	// with a macro binding or an enabled script hotkey. It is not persisted.
+	ConflictDisabled bool `json:"-"`
 }
 
 var (
@@ -42,6 +46,9 @@ var (
 	hotkeyComboText  *eui.ItemData
 	hotkeyNameInput  *eui.ItemData
 	hotkeyCmdSection *eui.ItemData
+
+	// hotkeysListDirty is set by script goroutines and consumed by Game.Update.
+	hotkeysListDirty atomic.Bool
 	hotkeyCmdInputs  []*eui.ItemData
 	editingHotkey    int = -1
 
@@ -296,6 +303,11 @@ func refreshHotkeysList() {
 	list := append([]Hotkey(nil), hotkeys...)
 	hotkeysMu.RUnlock()
 
+	// Mark conflict-disabled hotkeys (occupied by macros or enabled scripts).
+	for i := range list {
+		list[i].ConflictDisabled = isComboOccupied(list[i].Combo)
+	}
+
 	// global hotkeys
 	for i, hk := range list {
 		if hk.Script != "" {
@@ -319,6 +331,10 @@ func refreshHotkeysList() {
 		btn.Text = btnText
 		btn.Size = eui.Point{X: 460, Y: 20}
 		btn.FontSize = 10
+		if hk.Disabled || hk.ConflictDisabled {
+			btn.Filled = false
+			btn.Outlined = true
+		}
 		events.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventClick {
 				openHotkeyEditor(idx)
@@ -356,7 +372,7 @@ func refreshHotkeysList() {
 		row := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL, Fixed: true}
 		row.Size = eui.Point{X: 480, Y: 20}
 		cb, cbEvents := eui.NewCheckbox()
-		cb.Checked = !hk.Disabled
+		cb.Checked = !hk.Disabled && !hk.ConflictDisabled
 		cbEvents.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventClick {
 				hotkeysMu.Lock()
@@ -1030,7 +1046,10 @@ func checkHotkeys() {
 		list := append([]Hotkey(nil), hotkeys...)
 		hotkeysMu.RUnlock()
 		for _, hk := range list {
-			if !hk.Disabled && (hk.Combo == combo || strings.EqualFold(hk.Combo, combo) || sameCombo(hk.Combo, combo)) {
+			if hk.Disabled || hk.ConflictDisabled {
+				continue
+			}
+			if hk.Combo == combo || strings.EqualFold(hk.Combo, combo) || sameCombo(hk.Combo, combo) {
 				// If this is a script hotkey with a function handler, call it.
 				if hk.Script != "" {
 					if fn, ok := scriptGetHotkeyFn(hk.Script, hk.Combo); ok && fn != nil {
@@ -1053,7 +1072,7 @@ func checkHotkeys() {
 						ebiten.SetFullscreen(gs.Fullscreen)
 						ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
 						SettingsLock.Unlock()
-						settingsDirty = true
+						settingsDirty.Store(true)
 						continue
 					}
 					// Show hotkey-triggered command as if it were typed
@@ -1185,4 +1204,44 @@ func sameCombo(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// isComboOccupied reports whether combo is already claimed by a macro binding
+// or an enabled script hotkey. User hotkeys (Script == "") are not considered
+// occupied so that multiple user hotkeys can coexist as before.
+func isComboOccupied(combo string) bool {
+	if combo == "" {
+		return false
+	}
+	// Check macro key bindings.
+	macroState.mu.Lock()
+	for m := macroState.Keys; m != nil; m = m.Next {
+		macroCombo := macroGetComboName(m.Key, m.Modifiers)
+		if sameCombo(macroCombo, combo) {
+			macroState.mu.Unlock()
+			return true
+		}
+	}
+	for m := macroState.Clicks; m != nil; m = m.Next {
+		macroCombo := macroGetComboName(m.Key, m.Modifiers)
+		if sameCombo(macroCombo, combo) {
+			macroState.mu.Unlock()
+			return true
+		}
+	}
+	macroState.mu.Unlock()
+
+	// Check enabled script hotkeys.
+	hotkeysMu.RLock()
+	for _, hk := range hotkeys {
+		if hk.Script == "" || hk.Disabled {
+			continue
+		}
+		if sameCombo(hk.Combo, combo) {
+			hotkeysMu.RUnlock()
+			return true
+		}
+	}
+	hotkeysMu.RUnlock()
+	return false
 }

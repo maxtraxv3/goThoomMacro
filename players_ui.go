@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gothoom/eui"
@@ -17,7 +18,7 @@ import (
 
 var playersWin *eui.WindowData
 var playersList *eui.ItemData
-var playersDirty bool
+var playersDirty atomic.Bool
 var playersRowRefs = map[*eui.ItemData]string{}
 var selectedPlayerName string
 var lastPlayerClickName string

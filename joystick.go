@@ -201,7 +201,7 @@ func makeJoystickWindow() {
 	enableEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.JoystickEnabled = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	leftCol.AddItem(enableCB)
@@ -214,7 +214,7 @@ func makeJoystickWindow() {
 	walkEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventDropdownSelected {
 			gs.JoystickWalkStick = ev.Index - 1
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	leftCol.AddItem(walkStickDD)
@@ -228,7 +228,7 @@ func makeJoystickWindow() {
 	walkDZEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.JoystickWalkDeadzone = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	leftCol.AddItem(walkDeadzoneSlider)
@@ -241,7 +241,7 @@ func makeJoystickWindow() {
 	cursorEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventDropdownSelected {
 			gs.JoystickCursorStick = ev.Index - 1
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	leftCol.AddItem(cursorStickDD)
@@ -255,7 +255,7 @@ func makeJoystickWindow() {
 	cursorDZEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.JoystickCursorDeadzone = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	leftCol.AddItem(cursorDeadzoneSlider)
@@ -308,7 +308,7 @@ func makeJoystickWindow() {
 		events.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventInputChanged {
 				gs.JoystickCommands[btnName] = ev.Text
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 		buttonCmdInputs[name] = input
@@ -683,7 +683,7 @@ func updateJoystickWindow() {
 			gs.JoystickBindings["click1"] = btns[len(btns)-1]
 			click1Input.Text = strconv.Itoa(int(gs.JoystickBindings["click1"]))
 			click1Input.Dirty = true
-			settingsDirty = true
+			settingsDirty.Store(true)
 		} else if click2Input != nil && click2Input.Focused {
 			if gs.JoystickBindings == nil {
 				gs.JoystickBindings = make(map[string]ebiten.GamepadButton)
@@ -691,7 +691,7 @@ func updateJoystickWindow() {
 			gs.JoystickBindings["click2"] = btns[len(btns)-1]
 			click2Input.Text = strconv.Itoa(int(gs.JoystickBindings["click2"]))
 			click2Input.Dirty = true
-			settingsDirty = true
+			settingsDirty.Store(true)
 		} else if click3Input != nil && click3Input.Focused {
 			if gs.JoystickBindings == nil {
 				gs.JoystickBindings = make(map[string]ebiten.GamepadButton)
@@ -699,7 +699,7 @@ func updateJoystickWindow() {
 			gs.JoystickBindings["click3"] = btns[len(btns)-1]
 			click3Input.Text = strconv.Itoa(int(gs.JoystickBindings["click3"]))
 			click3Input.Dirty = true
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 

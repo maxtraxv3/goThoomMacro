@@ -526,11 +526,11 @@ func scriptLogEvent(owner, ev, data string) {
 		scriptDebugLines = scriptDebugLines[len(scriptDebugLines)-200:]
 	}
 	scriptDebugMu.Unlock()
-	refreshscriptDebug()
+	scriptDebugDirty.Store(true)
 }
 
 func scriptShowNotification(msg string) {
-	showNotification(msg)
+	pendingNotification.Store(msg)
 }
 
 func scriptIsDisabled(owner string) bool {
@@ -580,7 +580,7 @@ func scriptAddHotkey(owner, combo, command string) {
 		m[combo] = true
 	}
 	scriptHotkeyMu.Unlock()
-	refreshHotkeysList()
+	hotkeysListDirty.Store(true)
 	saveHotkeys()
 	name := scriptDisplayNames[owner]
 	if name == "" {
@@ -640,7 +640,7 @@ func scriptAddHotkeyFn(owner, combo string, handler func(HotkeyEvent)) {
 	for _, existing := range hotkeys {
 		if existing.Script == owner && existing.Combo == combo {
 			hotkeysMu.Unlock()
-			refreshHotkeysList()
+			hotkeysListDirty.Store(true)
 			saveHotkeys()
 			return
 		}
@@ -664,7 +664,7 @@ func scriptAddHotkeyFn(owner, combo string, handler func(HotkeyEvent)) {
 		m[combo] = true
 	}
 	scriptHotkeyMu.Unlock()
-	refreshHotkeysList()
+	hotkeysListDirty.Store(true)
 	saveHotkeys()
 	name := scriptDisplayNames[owner]
 	if name == "" {
@@ -944,7 +944,7 @@ func enablescript(owner string) {
 		return
 	}
 	loadscriptSource(owner, name, path, src, restrictedStdlib())
-	settingsDirty = true
+	settingsDirty.Store(true)
 	saveSettings()
 	refreshscriptsWindow()
 }
@@ -1039,7 +1039,7 @@ func disablescript(owner, reason string) {
 	scriptHotkeyFnMu.Lock()
 	delete(scriptHotkeyFns, owner)
 	scriptHotkeyFnMu.Unlock()
-	refreshTriggersList()
+	triggersListDirty.Store(true)
 	playerHandlersMu.Lock()
 	for i := len(scriptPlayerHandlers) - 1; i >= 0; i-- {
 		if scriptPlayerHandlers[i].owner == owner {
@@ -1103,9 +1103,9 @@ func disablescript(owner, reason string) {
 		disp = owner
 	}
 	consoleMessage("[script:" + disp + "] stopped: " + reason)
-	settingsDirty = true
+	settingsDirty.Store(true)
 	saveSettings()
-	refreshscriptsWindow()
+	scriptsListDirty.Store(true)
 }
 
 func stopAllscripts() {
@@ -1483,7 +1483,7 @@ func scriptRegisterChat(owner, name string, phrases []string, flags int, fn func
 		scriptTriggers[p] = append(scriptTriggers[p], triggerHandler{owner: owner, name: name, flags: flags, fn: fn})
 	}
 	triggerHandlersMu.Unlock()
-	refreshTriggersList()
+	triggersListDirty.Store(true)
 }
 
 // Back-compat wrapper for older API without flags.
@@ -1508,7 +1508,7 @@ func scriptRegisterConsole(owner string, phrases []string, fn func(string)) {
 		scriptConsoleTriggers[p] = append(scriptConsoleTriggers[p], triggerHandler{owner: owner, fn: fn})
 	}
 	triggerHandlersMu.Unlock()
-	refreshTriggersList()
+	triggersListDirty.Store(true)
 }
 
 // Back-compat: old console registration without msg parameter
@@ -1577,7 +1577,7 @@ func runChatTriggers(msg string) {
 					playersMu.Lock()
 					if np, ok := players[speaker]; ok && np != nil {
 						np.IsNPC = true
-						playersDirty = true
+						playersDirty.Store(true)
 					}
 					playersMu.Unlock()
 				}
@@ -1901,7 +1901,7 @@ func rescanscripts() {
 
 	applyEnabledScripts()
 	refreshscriptsWindow()
-	settingsDirty = true
+	settingsDirty.Store(true)
 }
 
 func checkForScriptEdit() {
@@ -1968,8 +1968,8 @@ func loadScripts() {
 		}
 	}
 	hotkeysMu.Unlock()
-	refreshHotkeysList()
-	refreshscriptsWindow()
+	hotkeysListDirty.Store(true)
+	scriptsListDirty.Store(true)
 	refreshscriptMod()
 }
 

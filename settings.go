@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gothoom/climg"
@@ -177,6 +178,13 @@ var gsdef settings = settings{
 	PromptDisableShaders:  true,
 	ChatTimestamps:        false,
 	ConsoleTimestamps:     false,
+	ConsoleColors:         true,
+	ConsoleYellColor:      eui.NewColor(255, 255, 0, 255),
+	ConsolePonderColor:    eui.NewColor(180, 100, 255, 255),
+	ConsoleThinkColor:     eui.NewColor(100, 255, 100, 255),
+	ConsoleNarrateColor:   eui.NewColor(100, 255, 100, 255),
+	ConsoleActionColor:    eui.NewColor(255, 80, 80, 255),
+	ConsoleCoinColor:      eui.NewColor(255, 215, 0, 255),
 	TimestampFormat:       "1/2/06 3:04:05pm",
 	LastUpdateCheck:       time.Time{},
 	NotifiedVersion:       0,
@@ -339,6 +347,13 @@ type settings struct {
 	PromptDisableShaders  bool
 	ChatTimestamps        bool
 	ConsoleTimestamps     bool
+	ConsoleColors         bool
+	ConsoleYellColor      eui.Color
+	ConsolePonderColor    eui.Color
+	ConsoleThinkColor     eui.Color
+	ConsoleNarrateColor   eui.Color
+	ConsoleActionColor    eui.Color
+	ConsoleCoinColor      eui.Color
 	TimestampFormat       string
 	LastUpdateCheck       time.Time
 	NotifiedVersion       int
@@ -393,6 +408,8 @@ type settings struct {
 
 	// Window behavior
 	ShowClanLordSplashImage bool
+	CursorNormalFile        string
+	CursorMoveFile          string
 	precacheSounds          bool
 	precacheImages          bool
 	smoothMoving            bool
@@ -400,7 +417,7 @@ type settings struct {
 }
 
 var (
-	settingsDirty    bool
+	settingsDirty    atomic.Bool
 	lastSettingsSave = time.Now()
 )
 
@@ -884,7 +901,7 @@ func applyQualityPreset(name string) {
 	}
 	applySettings()
 	clearCaches()
-	settingsDirty = true
+	settingsDirty.Store(true)
 	if qualityWin != nil {
 		qualityWin.Refresh()
 	}

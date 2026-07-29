@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"sort"
+	"sync/atomic"
 
 	"gothoom/eui"
 
@@ -12,6 +13,9 @@ import (
 var (
 	triggersWin  *eui.WindowData
 	triggersList *eui.ItemData
+
+	// triggersListDirty is set by script goroutines and consumed by Game.Update.
+	triggersListDirty atomic.Bool
 )
 
 func makeTriggersWindow() {

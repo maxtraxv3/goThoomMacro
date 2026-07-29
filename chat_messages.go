@@ -4,6 +4,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -13,6 +14,9 @@ const (
 var (
 	chatLog             = messageLog{max: maxChatMessages}
 	chatTTSDisabledOnce sync.Once
+	// chatDirty is set by chatMessage (network goroutine) and consumed by
+	// Game.Update (Ebiten goroutine) to avoid the same data race as consoleDirty.
+	chatDirty atomic.Bool
 )
 
 func chatMessage(msg string) {
@@ -45,7 +49,8 @@ func chatMessage(msg string) {
 	appendChatLog(msg)
 	macroState.TextLogBuffer = msg
 
-	updateChatWindow()
+	// Defer UI update to Game.Update on the Ebiten goroutine.
+	chatDirty.Store(true)
 
 	if tagged && !isSelfChatMessage(msg) {
 		playMentionSound()
@@ -57,7 +62,10 @@ func chatMessage(msg string) {
 
 	if gs.ChatTTS && !blockTTS && !isSelfChatMessage(msg) {
 		if speaker == "" || !isTTSBlocked(speaker) {
+			logDebug("chat tts: routing %q to TTS (speaker=%q)", msg, speaker)
 			speakChatMessage(msg)
+		} else {
+			logDebug("chat tts: blocked speaker %q for %q", speaker, msg)
 		}
 	} else if !gs.ChatTTS {
 		chatTTSDisabledOnce.Do(func() {

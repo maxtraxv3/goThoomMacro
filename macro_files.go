@@ -605,6 +605,38 @@ func ebitenKeyToMacroKey(k ebiten.Key) int {
 		return '8'
 	case ebiten.KeyDigit9:
 		return '9'
+	case ebiten.KeyNumpad0:
+		return '0'
+	case ebiten.KeyNumpad1:
+		return '1'
+	case ebiten.KeyNumpad2:
+		return '2'
+	case ebiten.KeyNumpad3:
+		return '3'
+	case ebiten.KeyNumpad4:
+		return '4'
+	case ebiten.KeyNumpad5:
+		return '5'
+	case ebiten.KeyNumpad6:
+		return '6'
+	case ebiten.KeyNumpad7:
+		return '7'
+	case ebiten.KeyNumpad8:
+		return '8'
+	case ebiten.KeyNumpad9:
+		return '9'
+	case ebiten.KeyNumpadEnter:
+		return 0x0D
+	case ebiten.KeyNumpadAdd:
+		return '+'
+	case ebiten.KeyNumpadSubtract:
+		return '-'
+	case ebiten.KeyNumpadMultiply:
+		return '*'
+	case ebiten.KeyNumpadDivide:
+		return '/'
+	case ebiten.KeyNumpadEqual:
+		return '='
 	}
 	return 0
 }
@@ -618,6 +650,10 @@ func ebitenButtonToMacroClick(b ebiten.MouseButton) int {
 		return 1025 // click2 / right-click
 	case ebiten.MouseButtonMiddle:
 		return 1026 // click3
+	}
+	// Higher mouse buttons: button 3 = click4, button 4 = click5, etc.
+	if b >= 3 && b <= 7 {
+		return 1024 + int(b)
 	}
 	return 0
 }
@@ -640,6 +676,20 @@ func macroCurrentMods() uint {
 	return mods
 }
 
+// isNumpadKey returns true if the ebiten key is a numpad key.
+func isNumpadKey(k ebiten.Key) bool {
+	switch k {
+	case ebiten.KeyNumpad0, ebiten.KeyNumpad1, ebiten.KeyNumpad2, ebiten.KeyNumpad3,
+		ebiten.KeyNumpad4, ebiten.KeyNumpad5, ebiten.KeyNumpad6, ebiten.KeyNumpad7,
+		ebiten.KeyNumpad8, ebiten.KeyNumpad9,
+		ebiten.KeyNumpadEnter, ebiten.KeyNumpadAdd, ebiten.KeyNumpadSubtract,
+		ebiten.KeyNumpadMultiply, ebiten.KeyNumpadDivide, ebiten.KeyNumpadEqual,
+		ebiten.KeyNumpadDecimal:
+		return true
+	}
+	return false
+}
+
 // macroProcessKeyEvents checks for key-based macro triggers. Called each frame
 // before checkHotkeys. Returns true if a macro consumed the key.
 func macroProcessKeyEvents() bool {
@@ -652,6 +702,9 @@ func macroProcessKeyEvents() bool {
 			continue
 		}
 		mods := macroCurrentMods()
+		if isNumpadKey(k) {
+			mods |= 0x0020 // numpad modifier
+		}
 		if macroDoKey(macroKey, mods) {
 			return true
 		}
@@ -682,6 +735,15 @@ func macroProcessClickEvents(clickedName string) bool {
 		mods := macroCurrentMods()
 		if macroDoClick(ebitenButtonToMacroClick(ebiten.MouseButtonMiddle), mods, clickedName) {
 			return true
+		}
+	}
+	// Check higher mouse buttons (click4-click8 = buttons 3-7).
+	mods := macroCurrentMods()
+	for b := ebiten.MouseButton(3); b <= 7; b++ {
+		if inpututil.IsMouseButtonJustPressed(b) {
+			if macroDoClick(ebitenButtonToMacroClick(b), mods, clickedName) {
+				return true
+			}
 		}
 	}
 	return false

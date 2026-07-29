@@ -6,9 +6,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="binaries"
 mkdir -p "$OUTPUT_DIR"
 
+# Track installed packages so we can uninstall build deps after
+PKG_MARKER=$(mktemp)
+dpkg-query -W -f='${Package}\n' 2>/dev/null | sort > "$PKG_MARKER" || true
+
+cleanup_build_deps() {
+  local new_pkgs
+  new_pkgs=$(dpkg-query -W -f='${Package}\n' 2>/dev/null | sort | comm -13 "$PKG_MARKER" - 2>/dev/null || true)
+  rm -f "$PKG_MARKER"
+  if [ -n "$new_pkgs" ] && command -v apt-get >/dev/null 2>&1; then
+    echo "Removing build-only packages..."
+    # shellcheck disable=SC2086
+    apt-get remove --purge -y $new_pkgs 2>/dev/null || true
+    apt-get autoremove --purge -y 2>/dev/null || true
+  fi
+}
+trap cleanup_build_deps EXIT
+
 platforms=(
   "linux:amd64"
-  #"linux:arm64"
+  "linux:arm64"
   "windows:amd64"
   "darwin:arm64"
   "darwin:amd64"
@@ -17,6 +34,7 @@ platforms=(
 
 declare -A FRIENDLY_NAMES=(
   ["linux:amd64"]="goThoom-Linux-x86_64"
+  ["linux:arm64"]="goThoom-Linux-aarch64"
   ["windows:amd64"]="goThoom-Windows-x86_64"
   ["darwin:arm64"]="goThoom-macOS-AppleSilicon"
   ["darwin:amd64"]="goThoom-macOS-Intel"
@@ -220,7 +238,7 @@ for platform in "${platforms[@]}"; do
   CXX=""
 
   case "$GOOS:$GOARCH" in
-    linux:amd64)
+    linux:amd64|linux:arm64)
       install_linux_deps
       CGO_ENABLED=1
       ;;

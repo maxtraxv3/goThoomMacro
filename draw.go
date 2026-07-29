@@ -52,11 +52,12 @@ type frameMobile struct {
 }
 
 type nameTagKey struct {
-	Text    string
-	Colors  uint8
-	Opacity uint8
-	FontGen uint32
-	Style   uint8
+	Text      string
+	Colors    uint8
+	Opacity   uint8
+	FontGen   uint32
+	Style     uint8
+	Underline bool
 }
 
 const (
@@ -534,7 +535,7 @@ func mobileOnEdge(m frameMobile, d frameDescriptor) bool {
 // buildNameTagImage creates a cached image for a mobile name tag using the
 // current font and settings. Returns the image and its width/height in pixels.
 // The frame color defaults to the name color unless frameClr overrides it.
-func buildNameTagImage(name string, colorCode uint8, opacity uint8, style uint8, frameClr color.RGBA) (*ebiten.Image, int, int) {
+func buildNameTagImage(name string, colorCode uint8, opacity uint8, style uint8, frameClr color.RGBA, underline bool) (*ebiten.Image, int, int) {
 	if name == "" {
 		return nil, 0, 0
 	}
@@ -557,17 +558,21 @@ func buildNameTagImage(name string, colorCode uint8, opacity uint8, style uint8,
 	if iw <= 0 || ih <= 0 {
 		iw, ih = 1, 1
 	}
-	img := newImage(iw+5, ih)
+	underlineH := 0
+	if underline {
+		underlineH = 1
+	}
+	img := newImage(iw+5, ih+underlineH)
 	// Fill background
 	op := acquireDrawOpts()
-	op.GeoM.Scale(float64(iw+5), float64(ih))
+	op.GeoM.Scale(float64(iw+5), float64(ih+underlineH))
 	op.ColorScale.ScaleWithColor(bgClr)
 	op.ColorScale.ScaleAlpha(float32(opacity) / 255)
 	img.DrawImage(whiteImage, op)
 	releaseDrawOpts(op)
 	// Border aligned to the filled background
 	width := float32(iw + 5)
-	height := float32(ih)
+	height := float32(ih + underlineH)
 	vector.FillRect(img, 0, 0, width, 1, frameClr, false)
 	vector.FillRect(img, 0, height-1, width, 1, frameClr, false)
 	vector.FillRect(img, 0, 0, 1, height, frameClr, false)
@@ -577,7 +582,11 @@ func buildNameTagImage(name string, colorCode uint8, opacity uint8, style uint8,
 	opTxt.GeoM.Translate(2, 2)
 	opTxt.ColorScale.ScaleWithColor(textClr)
 	text.Draw(img, name, face, opTxt)
-	return img, iw + 5, ih
+	// Underline
+	if underline {
+		vector.FillRect(img, 2, float32(ih)+1, float32(iw), 1, textClr, false)
+	}
+	return img, iw + 5, ih + underlineH
 }
 
 // pictureShift returns the (dx, dy) movement that most on-screen pictures agree on
@@ -961,7 +970,7 @@ func parseInventory(data []byte) ([]byte, bool) {
 	for len(data) > 0 && (data[0] == 0 || data[0] == kInvCmdLegacyPadding) {
 		data = data[1:]
 	}
-	inventoryDirty = true
+	inventoryDirty.Store(true)
 	return data, true
 }
 
@@ -1454,6 +1463,7 @@ func parseDrawState(data []byte, buildCache bool) (int32, int32, error) {
 	for _, m := range mobiles {
 		if d, ok := state.descriptors[m.Index]; ok && d.Name != "" {
 			style := styleRegular
+			underline := false
 			playersMu.RLock()
 			if p, ok := players[d.Name]; ok {
 				if p.Sharing && p.Sharee {
@@ -1463,14 +1473,18 @@ func parseDrawState(data []byte, buildCache bool) (int32, int32, error) {
 				} else if p.Sharee {
 					style = styleItalic
 				}
+				if p.Sharee {
+					underline = true
+				}
 			}
 			playersMu.RUnlock()
 			key := nameTagKey{
-				Text:    d.Name,
-				Colors:  m.Colors,
-				Opacity: uint8(gs.NameBgOpacity*255 + 0.5),
-				FontGen: fontGen,
-				Style:   style,
+				Text:      d.Name,
+				Colors:    m.Colors,
+				Opacity:   uint8(gs.NameBgOpacity*255 + 0.5),
+				FontGen:   fontGen,
+				Style:     style,
+				Underline: underline,
 			}
 			if prev, ok := state.mobiles[m.Index]; ok && prev.nameTag != nil && prev.nameTagKey == key {
 				m.nameTag = prev.nameTag
@@ -1487,7 +1501,7 @@ func parseDrawState(data []byte, buildCache bool) (int32, int32, error) {
 					}
 					playersMu.RUnlock()
 				}
-				img, iw, ih := buildNameTagImage(d.Name, m.Colors, uint8(gs.NameBgOpacity*255+0.5), style, frame)
+				img, iw, ih := buildNameTagImage(d.Name, m.Colors, uint8(gs.NameBgOpacity*255+0.5), style, frame, underline)
 				m.nameTag = img
 				m.nameTagW = iw
 				m.nameTagH = ih
@@ -1754,10 +1768,13 @@ func parseDrawState(data []byte, buildCache bool) (int32, int32, error) {
 					}
 				}
 			}
-			if gs.MessagesToConsole || !isChatBubble(bubbleType) {
-				consoleMessage(msg)
-			} else {
+			if isChatBubble(bubbleType) {
+				if gs.MessagesToConsole {
+					consoleMessage(msg)
+				}
 				chatMessage(msg)
+			} else {
+				consoleMessage(msg)
 			}
 		}
 		stateData = stateData[p+end+1:]

@@ -106,7 +106,7 @@ func loadPlayersPersist() {
 		}
 		playersMu.Unlock()
 	}
-	playersDirty = true
+	playersDirty.Store(true)
 }
 
 func savePlayersPersist() {

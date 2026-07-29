@@ -49,7 +49,7 @@ func runFakeMode(ctx context.Context) {
 		state.mobiles[1] = frameMobile{Index: 1, H: 32, V: 0}
 		prepareRenderCacheLocked()
 		stateMu.Unlock()
-		playersDirty = true
+		playersDirty.Store(true)
 
 		// Helper to append a bubble and show corresponding chat message.
 		emitBubble := func(idx uint8, typ int, name, verb, txt string) {

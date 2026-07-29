@@ -87,7 +87,7 @@ func setPlayerLabel(name string, label int, global bool) {
 	applyPlayerLabel(p)
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	if global {
 		playersPersistDirty = true
 	}

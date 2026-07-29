@@ -24,7 +24,7 @@ func handleBlockCommand(args string) {
 	applyPlayerLabel(p)
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	playersPersistDirty = true
 	killNameTagCacheFor(p.Name)
 	notifyPlayerHandlers(playerCopy)
@@ -51,7 +51,7 @@ func handleIgnoreCommand(args string) {
 	applyPlayerLabel(p)
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	playersPersistDirty = true
 	killNameTagCacheFor(p.Name)
 	notifyPlayerHandlers(playerCopy)
@@ -77,7 +77,7 @@ func handleForgetCommand(args string) {
 	applyPlayerLabel(p)
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	playersPersistDirty = true
 	killNameTagCacheFor(p.Name)
 	notifyPlayerHandlers(playerCopy)

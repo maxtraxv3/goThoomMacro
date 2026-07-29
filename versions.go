@@ -114,7 +114,7 @@ func loadChangelogAt(idx int) bool {
 
 func checkForNewVersion() {
 	gs.LastUpdateCheck = time.Now()
-	settingsDirty = true
+	settingsDirty.Store(true)
 
 	// Check for client fork updates from GitHub.
 	checkClientUpdate()
@@ -151,7 +151,7 @@ func checkForNewVersion() {
 				return
 			}
 			gs.NotifiedVersion = latest.Version
-			settingsDirty = true
+			settingsDirty.Store(true)
 			go func(ver int) {
 				for !uiReady {
 					time.Sleep(100 * time.Millisecond)
@@ -161,7 +161,7 @@ func checkForNewVersion() {
 			return
 		}
 		gs.NotifiedVersion = latest.Version
-		settingsDirty = true
+		settingsDirty.Store(true)
 		go func(ver int) {
 			for !uiReady {
 				time.Sleep(100 * time.Millisecond)

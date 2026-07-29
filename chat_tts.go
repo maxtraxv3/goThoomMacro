@@ -40,11 +40,18 @@ var (
 
 	lastTTSSpeaker string
 	lastTTSTime    time.Time
+	lastTTSText    string
+
+	ttsBlockedPhrases []string
 )
 
 func init() {
 	playChatTTSFunc = playChatTTS
 	resetChatTTSWorker()
+	ttsBlockedPhrases = []string{
+		"slices the root with his machete",
+		"slices the root with her machete",
+	}
 }
 
 func resetChatTTSWorker() {
@@ -71,7 +78,7 @@ func stopAllTTS() {
 
 func disableTTS() {
 	gs.ChatTTS = false
-	settingsDirty = true
+	settingsDirty.Store(true)
 	stopAllTTS()
 	updateSoundVolume()
 	if ttsMixCB != nil {
@@ -88,6 +95,7 @@ func chatTTSWorker(ctx context.Context, queue <-chan string) {
 		case <-ctx.Done():
 			return
 		case msg := <-queue:
+			logDebug("chat tts worker: received %q", msg)
 			msgs := []string{msg}
 			timer := time.NewTimer(200 * time.Millisecond)
 		collect:
@@ -111,6 +119,7 @@ func chatTTSWorker(ctx context.Context, queue <-chan string) {
 				return
 			default:
 			}
+			logDebug("chat tts worker: playing %q", strings.Join(msgs, ". "))
 			playChatTTSFunc(ctx, strings.Join(msgs, ". "))
 			pendingTTSMu.Lock()
 			pendingTTS -= len(msgs)
@@ -243,9 +252,25 @@ func speakChatMessage(msg string) {
 			}
 			ttsMsg = "and then said " + content
 		}
-		lastTTSSpeaker = speaker
-		lastTTSTime = now
+	lastTTSSpeaker = speaker
+	lastTTSTime = now
 	}
+
+	// Skip blocked phrases
+	lower := strings.ToLower(ttsMsg)
+	for _, phrase := range ttsBlockedPhrases {
+		if strings.Contains(lower, phrase) {
+			logDebug("chat tts: skipping blocked phrase %q", ttsMsg)
+			return
+		}
+	}
+
+	// Dedup: skip if same text as the last TTS utterance
+	if ttsMsg == lastTTSText {
+		logDebug("chat tts: skipping duplicate %q", ttsMsg)
+		return
+	}
+	lastTTSText = ttsMsg
 
 	pendingTTSMu.Lock()
 	if pendingTTS >= 10 {
@@ -255,8 +280,10 @@ func speakChatMessage(msg string) {
 	}
 	pendingTTS++
 	pendingTTSMu.Unlock()
+	logDebug("chat tts: enqueuing %q (pending=%d)", ttsMsg, pendingTTS)
 	select {
 	case chatTTSQueue <- ttsMsg:
+		logDebug("chat tts: enqueued %q", ttsMsg)
 	default:
 		pendingTTSMu.Lock()
 		pendingTTS--

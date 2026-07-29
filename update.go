@@ -839,7 +839,7 @@ func downloadDataFiles(clientVer int, status dataFilesStatus, getSoundfont, getP
 	if getPiper || getFem || getMale {
 		if path, model, cfg, err := preparePiper(dataDirPath); err == nil {
 			piperPath, piperModel, piperConfig = path, model, cfg
-			settingsDirty = true
+			settingsDirty.Store(true)
 			go playChatTTS(chatTTSCtx, ttsTestPhrase)
 		} else {
 			logError("prepare piper: %v", err)

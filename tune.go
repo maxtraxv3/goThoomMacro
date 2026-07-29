@@ -86,7 +86,7 @@ var (
 
 func disableMusic() {
 	gs.Music = false
-	settingsDirty = true
+	settingsDirty.Store(true)
 	stopAllMusic()
 	clearTuneQueue()
 	updateSoundVolume()

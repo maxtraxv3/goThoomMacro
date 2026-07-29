@@ -29,7 +29,7 @@ func parseShareText(raw []byte, s string) bool {
 			killNameTagCacheFor(pl.Name)
 			notifyPlayerHandlers(pl)
 		}
-		playersDirty = true
+		playersDirty.Store(true)
 		return true
 	case strings.HasPrefix(s, "You are no longer sharing experiences with "):
 		// a single sharee removed
@@ -67,7 +67,7 @@ func parseShareText(raw []byte, s string) bool {
 				killNameTagCacheFor(pl.Name)
 				notifyPlayerHandlers(pl)
 			}
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		return true
 	case strings.HasPrefix(s, "You are sharing experiences with ") || strings.HasPrefix(s, "You begin sharing your experiences with "):
@@ -112,7 +112,7 @@ func parseShareText(raw []byte, s string) bool {
 				killNameTagCacheFor(pl.Name)
 				notifyPlayerHandlers(pl)
 			}
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		return true
 	case playerName != "" && (strings.HasPrefix(s, playerName+" is sharing experiences with ") || strings.HasPrefix(s, playerName+" begins sharing experiences with ")):
@@ -176,7 +176,7 @@ func parseShareText(raw []byte, s string) bool {
 			killNameTagCacheFor(pl.Name)
 			notifyPlayerHandlers(pl)
 		}
-		playersDirty = true
+		playersDirty.Store(true)
 		return true
 	case playerName != "" && strings.HasPrefix(s, playerName+" is no longer sharing experiences with "):
 		// Hero (you) unsharing others in third-person form
@@ -219,7 +219,7 @@ func parseShareText(raw []byte, s string) bool {
 			killNameTagCacheFor(pl.Name)
 			notifyPlayerHandlers(pl)
 		}
-		playersDirty = true
+		playersDirty.Store(true)
 		return true
 	case strings.HasSuffix(s, " is sharing experiences with you."):
 		name := utfFold(firstTagContent(raw, 'p', 'n'))
@@ -234,7 +234,7 @@ func parseShareText(raw []byte, s string) bool {
 				killNameTagCacheFor(name)
 				notifyPlayerHandlers(playerCopy)
 			}
-			playersDirty = true
+			playersDirty.Store(true)
 			showNotification(name + " is sharing with you")
 		}
 		return true
@@ -256,7 +256,7 @@ func parseShareText(raw []byte, s string) bool {
 				killNameTagCacheFor(name)
 				notifyPlayerHandlers(playerCopy)
 			}
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		return true
 	case strings.HasPrefix(s, "Currently sharing their experiences with you"):
@@ -297,7 +297,7 @@ func parseShareText(raw []byte, s string) bool {
 				killNameTagCacheFor(pl.Name)
 				notifyPlayerHandlers(pl)
 			}
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		return true
 	}
@@ -317,11 +317,11 @@ func parseFallenText(raw []byte, s string) bool {
 				p.FellTime = time.Now()
 				playerCopy := *p
 				playersMu.Unlock()
-				playersDirty = true
+				playersDirty.Store(true)
 				notifyPlayerHandlers(playerCopy)
 			} else {
 				playersMu.Unlock()
-				playersDirty = true
+				playersDirty.Store(true)
 			}
 			if gs.NotifyFallen {
 				showNotification(playerName+" has fallen", 72, 69, 65)
@@ -337,11 +337,11 @@ func parseFallenText(raw []byte, s string) bool {
 				p.FellTime = time.Time{}
 				playerCopy := *p
 				playersMu.Unlock()
-				playersDirty = true
+				playersDirty.Store(true)
 				notifyPlayerHandlers(playerCopy)
 			} else {
 				playersMu.Unlock()
-				playersDirty = true
+				playersDirty.Store(true)
 			}
 			if gs.NotifyNotFallen {
 				showNotification(playerName+" is no longer fallen", 60, 64, 67)
@@ -371,7 +371,7 @@ func parseFallenText(raw []byte, s string) bool {
 		p.FellTime = time.Now()
 		playerCopy := *p
 		playersMu.Unlock()
-		playersDirty = true
+		playersDirty.Store(true)
 		notifyPlayerHandlers(playerCopy)
 		if gs.NotifyFallen {
 			showNotification(name+" has fallen", 72, 69, 65)
@@ -397,11 +397,11 @@ func parseFallenText(raw []byte, s string) bool {
 			p.FellTime = time.Time{}
 			playerCopy := *p
 			playersMu.Unlock()
-			playersDirty = true
+			playersDirty.Store(true)
 			notifyPlayerHandlers(playerCopy)
 		} else {
 			playersMu.Unlock()
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		if gs.NotifyNotFallen {
 			showNotification(name+" is no longer fallen", 60, 64, 67)
@@ -453,7 +453,7 @@ func parsePresenceText(raw []byte, s string) bool {
 			killNameTagCacheFor(name)
 			playersPersistDirty = true
 		}
-		playersDirty = true
+		playersDirty.Store(true)
 		if changed {
 			notifyPlayerHandlers(playerCopy)
 		}
@@ -475,11 +475,11 @@ func parsePresenceText(raw []byte, s string) bool {
 			}
 			playerCopy := *p
 			playersMu.Unlock()
-			playersDirty = true
+			playersDirty.Store(true)
 			notifyPlayerHandlers(playerCopy)
 		} else {
 			playersMu.Unlock()
-			playersDirty = true
+			playersDirty.Store(true)
 		}
 		return true
 	}
@@ -534,7 +534,7 @@ func parseBardText(raw []byte, s string) bool {
 			p.Offline = false
 			playerCopy := *p
 			playersMu.Unlock()
-			playersDirty = true
+			playersDirty.Store(true)
 			playersPersistDirty = true
 			notifyPlayerHandlers(playerCopy)
 			return false

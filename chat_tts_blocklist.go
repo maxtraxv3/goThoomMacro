@@ -28,6 +28,21 @@ func syncTTSBlocklist() {
 	ttsBlocklistMu.Unlock()
 }
 
+func addTTSBlockedName(name string) {
+	name = strings.ToLower(utfFold(strings.TrimSpace(name)))
+	if name == "" {
+		return
+	}
+	ttsBlocklistMu.Lock()
+	defer ttsBlocklistMu.Unlock()
+	if _, exists := ttsBlocklist[name]; exists {
+		return
+	}
+	ttsBlocklist[name] = struct{}{}
+	gs.ChatTTSBlocklist = append(gs.ChatTTSBlocklist, name)
+	settingsDirty.Store(true)
+}
+
 func isTTSBlocked(name string) bool {
 	name = strings.ToLower(utfFold(strings.TrimSpace(name)))
 	ttsBlocklistMu.RLock()
@@ -69,7 +84,7 @@ func handleNoTTSCommand(args string) {
 		}
 		ttsBlocklist[name] = struct{}{}
 		gs.ChatTTSBlocklist = append(gs.ChatTTSBlocklist, name)
-		settingsDirty = true
+		settingsDirty.Store(true)
 		consoleMessage("Added " + name + " to the TTS blocklist.")
 	case "remove":
 		if _, exists := ttsBlocklist[name]; !exists {
@@ -83,7 +98,7 @@ func handleNoTTSCommand(args string) {
 				break
 			}
 		}
-		settingsDirty = true
+		settingsDirty.Store(true)
 		consoleMessage("Removed " + name + " from the TTS blocklist.")
 	default:
 		consoleMessage("Usage: /notts add|remove <name> or /notts list")

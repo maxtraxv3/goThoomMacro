@@ -91,7 +91,7 @@ func parseBackendInfo(data []byte) {
 	}
 	playerCopy := *p
 	playersMu.Unlock()
-	playersDirty = true
+	playersDirty.Store(true)
 	playersPersistDirty = true
 	notifyPlayerHandlers(playerCopy)
 	for _, nm := range changedNames {
@@ -191,7 +191,7 @@ func parseBackendShare(data []byte) {
 		}
 		notifyPlayerHandlers(playerCopy)
 	}
-	playersDirty = true
+	playersDirty.Store(true)
 }
 
 // parseBackendWho parses "be-wh" messages listing players.
@@ -272,7 +272,7 @@ func parseBackendWho(data []byte) {
 		batchCount++
 	}
 	if batchCount > 0 {
-		playersDirty = true
+		playersDirty.Store(true)
 	}
 	if newCount > 0 {
 		playersPersistDirty = true

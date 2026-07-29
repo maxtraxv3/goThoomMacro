@@ -4,6 +4,7 @@ package main
 
 import (
     "sync"
+    "sync/atomic"
 )
 
 // Minimal types and globals to let movie parsing compile without GUI deps.
@@ -76,7 +77,7 @@ var clImages planeProvider
 
 // Players UI flags referenced by player.go; harmless in tests.
 var (
-    playersDirty        bool
+    playersDirty        atomic.Bool
     playersPersistDirty bool
 )
 

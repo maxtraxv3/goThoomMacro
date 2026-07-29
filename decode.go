@@ -435,9 +435,8 @@ func handleInfoText(data []byte) {
 			if isChatBubble(bubbleType) {
 				if gs.MessagesToConsole {
 					consoleMessage(txt)
-				} else {
-					chatMessage(txt)
 				}
+				chatMessage(txt)
 			} else {
 				consoleMessage(txt)
 			}

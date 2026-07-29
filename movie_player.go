@@ -331,7 +331,7 @@ func (p *moviePlayer) makePlaybackWindow() {
 		loadPlayersPersist()
 		updatePlayersWindow()
 		playersPersistDirty = false
-		playersDirty = false
+		playersDirty.Store(false)
 		// Clear the selected movie path and reopen the login window.
 		clmov = ""
 		pcapPath = ""

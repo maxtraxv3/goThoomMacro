@@ -42,7 +42,7 @@ func requestPlayersData() {
 	}
 	playersMu.RUnlock()
 	if changed {
-		playersDirty = true
+		playersDirty.Store(true)
 	}
 
 	if pendingCommand != "" {

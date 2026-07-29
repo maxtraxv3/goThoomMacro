@@ -33,6 +33,8 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - "Reload Macros" in the Actions menu
 - "Untested Version" popup removed
 - Default timestamp format changed to match text logs (`1/2/06 3:04:05pm`)
+- Color-coded console messages: yells, ponders, thinks, narrates, actions, coins — each with individually customizable color via HSV color picker in Settings. Click "Customize Colors..." after enabling. Defaults: yell=yellow, action=red, think/narrate=green, ponder=purple, coin=gold. Enabled by default, toggle in Settings.
+- TTS blocklist management in Advanced Settings (add blocked speakers, "More Piper voices..." link to download additional voices)
 
 ### Gamepad / Controller Support
 
@@ -52,12 +54,20 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - Button tester: press any button and see its name + number for easy mapping
 - Stick mapping dropdowns auto-detect axis count from the connected controller
 - Auto-detection of controller connect/disconnect with refresh button
+- Numpad keys (`Numpad0`-`Numpad9`, `NumpadEnter`, `NumpadAdd`, etc.) mapped for macros
+- Higher mouse buttons (`click4`-`click8`) detected
 
 ### Text Logs
 
 - Text log files match the old ClanLord client format and location:
   `Text Logs/<CharName>/CL Log YYYY-MM-DD HH.MM.SS.txt`
 - No session header or nested year/month subdirectories
+
+### Hotkey Conflict Detection
+
+- Hotkeys that conflict with macro key bindings or enabled script hotkeys are automatically disabled at runtime
+- Conflicts resolve automatically when the conflicting macro or script is removed/disabled
+- Conflict-disabled hotkeys are visually marked in the Hotkeys UI (outlined buttons)
 
 ### Bug Fixes
 
@@ -68,6 +78,11 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - `set`/`setglobal` variable names are not resolved as variables
 - `\r` stripping and escape processing in macro text
 - `maxCmdsPerFrame` safety limit for unfriendly mode
+- TTS now works when "Combine chat + console" is enabled (chat bubbles always route through `chatMessage()`)
+- TTS skips consecutive duplicate messages (same text won't be spoken twice in a row)
+- Auto-blocks your own character from TTS on login (added to TTS blocklist)
+- TTS blocklist management UI in Advanced Settings (add names, view blocked list, link to download more Piper voices)
+- Numpad keys (numpad-0 through numpad-9) now work in key macros — `keyNameToCode` was missing digit entries, causing `numpad-1` etc. to silently fail to parse
 
 ### Auto-Update (Client Binary)
 
@@ -126,6 +141,13 @@ All original features are preserved, including:
    go build -ldflags "-s -w -X main.clientVersion=v1.0.0" -o gothoom .
    ```
    If `clientVersion` is left as the default (`dev`), auto-update is disabled.
+
+### Cross-compilation (Linux, Windows, macOS, RPi, Web)
+
+Use `build-scripts/build_binaries.sh` or `build-scripts/build_binaries_local.sh` to build for all targets at once. These scripts:
+- Install any missing build dependencies (osxcross for macOS, mingw-64 for Windows via cgo, etc.)
+- Build binaries for `linux:amd64`, `linux:arm64` (Raspberry Pi), `windows:amd64`, `darwin:arm64` (Apple Silicon), `darwin:amd64` (Intel), and `js:wasm`
+- **Auto-cleanup**: any packages installed by the script that were not already on your system are automatically removed after the build completes
 
 ---
 

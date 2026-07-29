@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gothoom/eui"
@@ -60,6 +61,7 @@ var passRemember bool
 var passRememberCB *eui.ItemData
 
 var changelogWin *eui.WindowData
+var consoleColorPickerWin *eui.WindowData
 
 // applyBoldFace sets a bold text face for the given item based on its current
 // FontSize and the active UI scale, so it renders as a bold section label.
@@ -92,6 +94,12 @@ var selectedscript string
 var scriptConfigWin *eui.WindowData
 var scriptConfigOwner string
 var scriptDebugList *eui.ItemData
+
+// Dirty flags set by script goroutines; consumed by Game.Update on the Ebiten goroutine.
+var scriptsListDirty atomic.Bool
+var scriptDebugDirty atomic.Bool
+var pendingNotification atomic.Value // string
+var pendingNotificationKeys atomic.Value // []int
 
 // Checkboxes in the Windows window so we can update their state live
 var windowsPlayersCB *eui.ItemData
@@ -992,7 +1000,7 @@ func makeMixerWindow() {
 				volumeSlider.Value = ev.Item.Value
 				volumeSlider.Dirty = true
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateSoundVolume()
 		}
 	}
@@ -1033,7 +1041,7 @@ func makeMixerWindow() {
 		func(ev eui.UIEvent) {
 			if ev.Type == eui.EventSliderChanged {
 				gs.GameVolume = float64(ev.Value)
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		},
@@ -1044,7 +1052,7 @@ func makeMixerWindow() {
 				if !ev.Checked {
 					stopAllSounds()
 				}
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		})
@@ -1055,7 +1063,7 @@ func makeMixerWindow() {
 		func(ev eui.UIEvent) {
 			if ev.Type == eui.EventSliderChanged {
 				gs.MusicVolume = float64(ev.Value)
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		},
@@ -1079,7 +1087,7 @@ func makeMixerWindow() {
 							return
 						}
 					}
-					settingsDirty = true
+					settingsDirty.Store(true)
 					updateSoundVolume()
 				} else {
 					disableMusic()
@@ -1093,7 +1101,7 @@ func makeMixerWindow() {
 		func(ev eui.UIEvent) {
 			if ev.Type == eui.EventSliderChanged {
 				gs.ChatTTSVolume = float64(ev.Value)
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		},
@@ -1117,7 +1125,7 @@ func makeMixerWindow() {
 							return
 						}
 					}
-					settingsDirty = true
+					settingsDirty.Store(true)
 					updateSoundVolume()
 				} else {
 					disableTTS()
@@ -1131,7 +1139,7 @@ func makeMixerWindow() {
 		func(ev eui.UIEvent) {
 			if ev.Type == eui.EventSliderChanged {
 				gs.NotificationVolume = float64(ev.Value)
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		},
@@ -1139,7 +1147,7 @@ func makeMixerWindow() {
 			if ev.Type == eui.EventCheckboxChanged {
 				gs.NotificationBeep = ev.Checked
 				notifMixSlider.Disabled = !ev.Checked
-				settingsDirty = true
+				settingsDirty.Store(true)
 				updateSoundVolume()
 			}
 		})
@@ -1190,7 +1198,7 @@ func makeMixerWindow() {
 			if volumeSlider != nil {
 				volumeSlider.Dirty = true
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateSoundVolume()
 		}
 	}
@@ -1211,7 +1219,7 @@ func makeMixerWindow() {
 			} else {
 				focusMuted = false
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateSoundVolume()
 		}
 	}
@@ -1535,7 +1543,7 @@ func showRecordingSaveDialog(path string) {
 		// Apply don't-show preference
 		if recordSaveDontShowCB != nil && recordSaveDontShowCB.Checked {
 			gs.PromptOnSaveRecording = false
-			settingsDirty = true
+			settingsDirty.Store(true)
 			saveSettings()
 		}
 		// Resolve new path
@@ -1891,8 +1899,8 @@ func makeDownloadsWindow() {
 				// Refresh windows that depend on CL_Images now that
 				// the archive is available so icons appear without
 				// requiring a manual resize.
-				inventoryDirty = true
-				playersDirty = true
+				inventoryDirty.Store(true)
+				playersDirty.Store(true)
 			}
 
 			sndStart := time.Now()
@@ -2174,6 +2182,7 @@ func makeAddCharacterWindow() {
 	addCharWin.DefaultButton = addBtn
 	addEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventClick {
+			logDebug("add char: name=%q passLen=%d remember=%v", addCharName, len(addCharPass), addCharRemember)
 			h := md5.Sum([]byte(addCharPass))
 			hash := hex.EncodeToString(h[:])
 			if !addCharRemember {
@@ -2868,7 +2877,7 @@ func makeSettingsWindow() {
 					if ev.Type == eui.EventCheckboxChanged {
 						gs.WindowTiling = ev.Checked
 						eui.SetWindowTiling(ev.Checked)
-						settingsDirty = true
+						settingsDirty.Store(true)
 					}
 				}
 				right.AddItem(tilingCB)
@@ -2882,7 +2891,7 @@ func makeSettingsWindow() {
 					if ev.Type == eui.EventCheckboxChanged {
 						gs.WindowSnapping = ev.Checked
 						eui.SetWindowSnapping(ev.Checked)
-						settingsDirty = true
+						settingsDirty.Store(true)
 					}
 				}
 				right.AddItem(snapCB)
@@ -2910,7 +2919,7 @@ func makeSettingsWindow() {
 				gs.UIScale = pendingUIScale
 				eui.SetUIScale(float32(gs.UIScale))
 				updateGameWindowSize()
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 
@@ -2935,7 +2944,7 @@ func makeSettingsWindow() {
 			gs.Fullscreen = ev.Checked
 			ebiten.SetFullscreen(gs.Fullscreen)
 			ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(fullscreenCB)
@@ -2961,7 +2970,7 @@ func makeSettingsWindow() {
 			name := styleDD.Options[ev.Index]
 			if err := eui.LoadStyle(name); err == nil {
 				gs.Style = name
-				settingsDirty = true
+				settingsDirty.Store(true)
 				settingsWin.Refresh()
 			}
 		}
@@ -2997,7 +3006,7 @@ func makeSettingsWindow() {
 						break
 					}
 				}
-				settingsDirty = true
+				settingsDirty.Store(true)
 				settingsWin.Refresh()
 				// Theme may change accent mapping; rebuild dependent windows immediately.
 				updateInventoryWindow()
@@ -3056,7 +3065,7 @@ func makeSettingsWindow() {
 			if !gs.ClickToToggle {
 				walkToggled = false
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(toggle)
@@ -3071,7 +3080,7 @@ func makeSettingsWindow() {
 			SettingsLock.Lock()
 			defer SettingsLock.Unlock()
 			gs.KeyboardMovement = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(wasdCB)
@@ -3087,7 +3096,7 @@ func makeSettingsWindow() {
 			SettingsLock.Lock()
 			defer SettingsLock.Unlock()
 			gs.KBWalkSpeed = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(keySpeedSlider)
@@ -3176,7 +3185,7 @@ func makeSettingsWindow() {
 			if consoleWin != nil {
 				consoleWin.Refresh()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(inputOpenCB)
@@ -3191,7 +3200,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.MessagesToConsole = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if ev.Checked {
 				if chatWin != nil {
 					chatWin.Close()
@@ -3215,7 +3224,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.ChatTimestamps = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateChatWindow()
 		}
 	}
@@ -3231,11 +3240,45 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.ConsoleTimestamps = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateConsoleWindow()
 		}
 	}
 	left.AddItem(consoleTSCB)
+
+	consoleColorsCB, consoleColorsEvents := eui.NewCheckbox()
+	consoleColorsCB.Text = "Color-coded console"
+	consoleColorsCB.Size = eui.Point{X: panelWidth, Y: 24}
+	consoleColorsCB.Checked = gs.ConsoleColors
+	consoleColorsCB.SetTooltip("Color messages by type: yells=yellow, actions=red, thinks=green, etc.")
+	consoleColorsEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			defer SettingsLock.Unlock()
+
+			gs.ConsoleColors = ev.Checked
+			settingsDirty.Store(true)
+			updateConsoleWindow()
+		}
+	}
+	left.AddItem(consoleColorsCB)
+
+	consoleColorPickerBtn, consoleColorPickerEvents := eui.NewButton()
+	consoleColorPickerBtn.Text = "Customize Colors..."
+	consoleColorPickerBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	consoleColorPickerEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			if consoleColorPickerWin != nil {
+				consoleColorPickerWin.Close()
+				consoleColorPickerWin = nil
+			}
+			makeConsoleColorPickerWindow()
+			if consoleColorPickerWin != nil {
+				consoleColorPickerWin.ToggleNear(ev.Item)
+			}
+		}
+	}
+	left.AddItem(consoleColorPickerBtn)
 
 	notifCB, notifEvents := eui.NewCheckbox()
 	notifCB.Text = "Game Notifications"
@@ -3247,7 +3290,7 @@ func makeSettingsWindow() {
 			SettingsLock.Lock()
 			gs.Notifications = ev.Checked
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if !ev.Checked {
 				clearNotifications()
 			}
@@ -3297,7 +3340,7 @@ func makeSettingsWindow() {
 				defer SettingsLock.Unlock()
 
 				gs.BarPlacement = p.value
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 		right.AddItem(radio)
@@ -3310,7 +3353,7 @@ func makeSettingsWindow() {
 	barColorEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.BarColorByValue = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(barColorCB)
@@ -3332,7 +3375,7 @@ func makeSettingsWindow() {
 	maxNightEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.MaxNightLevel = int(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(maxNightSlider)
@@ -3351,7 +3394,7 @@ func makeSettingsWindow() {
 
 			gs.NameBgOpacity = float64(ev.Value)
 			killNameTagCache()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(nameBgSlider)
@@ -3368,7 +3411,7 @@ func makeSettingsWindow() {
 
 			gs.NameTagLabelColors = ev.Checked
 			killNameTagCache()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(nameBorderCB)
@@ -3385,7 +3428,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.NameTagsOnHoverOnly = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(nameHoverCB)
@@ -3399,7 +3442,7 @@ func makeSettingsWindow() {
 	bubbleOpEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BubbleOpacity = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(bubbleOpSlider)
@@ -3413,7 +3456,7 @@ func makeSettingsWindow() {
 	bubbleBaseLifeEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BubbleBaseLife = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(bubbleBaseLifeSlider)
@@ -3428,7 +3471,7 @@ func makeSettingsWindow() {
 	bubblePerWordEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BubbleLifePerWord = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(bubblePerWordSlider)
@@ -3443,7 +3486,7 @@ func makeSettingsWindow() {
 	bubbleScaleEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BubbleScale = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(bubbleScaleSlider)
@@ -3460,7 +3503,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.BarOpacity = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	right.AddItem(barOpacitySlider)
@@ -3500,7 +3543,7 @@ func makeSettingsWindow() {
 
 			gs.MainFontSize = float64(ev.Value)
 			initFont()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(labelFontSlider)
@@ -3523,7 +3566,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.InventoryFontSize = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateInventoryWindow()
 		}
 	}
@@ -3547,7 +3590,7 @@ func makeSettingsWindow() {
 			defer SettingsLock.Unlock()
 
 			gs.PlayersFontSize = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updatePlayersWindow()
 			if playersWin != nil {
 				playersWin.Refresh()
@@ -3572,7 +3615,7 @@ func makeSettingsWindow() {
 			if consoleWin != nil {
 				consoleWin.Refresh()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(consoleFontSlider)
@@ -3593,7 +3636,7 @@ func makeSettingsWindow() {
 			if chatWin != nil {
 				chatWin.Refresh()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(chatWindowFontSlider)
@@ -3608,7 +3651,7 @@ func makeSettingsWindow() {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BubbleFontSize = float64(ev.Value)
 			initFont()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(chatFontSlider)
@@ -3631,7 +3674,7 @@ func makeSettingsWindow() {
 			SettingsLock.Lock()
 			gs.ChatTTSSpeed = float64(ev.Value)
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(ttsSpeedSlider)
@@ -3643,6 +3686,79 @@ func makeSettingsWindow() {
 	settingsWin.AddWindow(false)
 }
 
+func makeConsoleColorPickerWindow() {
+	if consoleColorPickerWin != nil {
+		return
+	}
+	const cw float32 = 280
+	consoleColorPickerWin = eui.NewWindow()
+	consoleColorPickerWin.Title = "Console Colors"
+	consoleColorPickerWin.Closable = true
+	consoleColorPickerWin.Resizable = false
+	consoleColorPickerWin.AutoSize = true
+	consoleColorPickerWin.Movable = true
+	consoleColorPickerWin.SetZone(eui.HZoneCenterRight, eui.VZoneMiddleTop)
+
+	flow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_VERTICAL}
+
+	addColorRow := func(label string, color *eui.Color) {
+		lbl, _ := eui.NewText()
+		lbl.Text = label
+		lbl.FontSize = 12
+		lbl.Size = eui.Point{X: cw, Y: 20}
+		flow.AddItem(lbl)
+
+		wheel, events := eui.NewColorWheel()
+		wheel.Size = eui.Point{X: cw, Y: 45}
+		wheel.WheelColor = *color
+		events.Handle = func(ev eui.UIEvent) {
+			if ev.Type == eui.EventColorChanged {
+				SettingsLock.Lock()
+				defer SettingsLock.Unlock()
+				*color = wheel.WheelColor
+				settingsDirty.Store(true)
+				updateConsoleWindow()
+			}
+		}
+		flow.AddItem(wheel)
+	}
+
+	addColorRow("Yell", &gs.ConsoleYellColor)
+	addColorRow("Ponder", &gs.ConsolePonderColor)
+	addColorRow("Think", &gs.ConsoleThinkColor)
+	addColorRow("Narrate", &gs.ConsoleNarrateColor)
+	addColorRow("Action", &gs.ConsoleActionColor)
+	addColorRow("Coin", &gs.ConsoleCoinColor)
+
+	resetBtn, resetEvents := eui.NewButton()
+	resetBtn.Text = "Reset to Defaults"
+	resetBtn.Size = eui.Point{X: cw, Y: 24}
+	resetBtn.Color = eui.ColorDarkRed
+	resetBtn.HoverColor = eui.ColorRed
+	resetEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			SettingsLock.Lock()
+			defer SettingsLock.Unlock()
+			gs.ConsoleYellColor = gsdef.ConsoleYellColor
+			gs.ConsolePonderColor = gsdef.ConsolePonderColor
+			gs.ConsoleThinkColor = gsdef.ConsoleThinkColor
+			gs.ConsoleNarrateColor = gsdef.ConsoleNarrateColor
+			gs.ConsoleActionColor = gsdef.ConsoleActionColor
+			gs.ConsoleCoinColor = gsdef.ConsoleCoinColor
+			settingsDirty.Store(true)
+			updateConsoleWindow()
+			if consoleColorPickerWin != nil {
+				consoleColorPickerWin.Close()
+				consoleColorPickerWin = nil
+			}
+		}
+	}
+	flow.AddItem(resetBtn)
+
+	consoleColorPickerWin.AddItem(flow)
+	consoleColorPickerWin.AddWindow(false)
+}
+
 // resetAllSettings restores gs to defaults, reapplies, and refreshes windows.
 func resetAllSettings() {
 	gs = gsdef
@@ -3651,7 +3767,7 @@ func resetAllSettings() {
 	applySettings()
 	updateGameWindowSize()
 	saveSettings()
-	settingsDirty = false
+	settingsDirty.Store(false)
 
 	// Close existing windows so they can be recreated in their default state.
 	if inventoryWin != nil {
@@ -3891,7 +4007,7 @@ func showShaderDisablePrompt() {
 		}
 		if shaderWarnDontShowCB != nil && shaderWarnDontShowCB.Checked {
 			gs.PromptDisableShaders = false
-			settingsDirty = true
+			settingsDirty.Store(true)
 			saveSettings()
 		}
 		shaderWarnWin.Close()
@@ -3909,7 +4025,7 @@ func showShaderDisablePrompt() {
 			gs.PromptDisableShaders = false
 		}
 		gs.ShaderLighting = false
-		settingsDirty = true
+		settingsDirty.Store(true)
 		applySettings()
 		saveSettings()
 		shaderWarnWin.Close()
@@ -4046,7 +4162,7 @@ func makeQualityWindow() {
 				clearCaches()
 			}
 			renderScale.Value = float32(v)
-			settingsDirty = true
+			settingsDirty.Store(true)
 			initFont()
 			if gameWin != nil {
 				gameWin.Refresh()
@@ -4066,7 +4182,7 @@ func makeQualityWindow() {
 			if gs.SpriteUpscaleFilter != ev.Checked {
 				gs.SpriteUpscaleFilter = ev.Checked
 				clearCaches()
-				settingsDirty = true
+				settingsDirty.Store(true)
 				if gameWin != nil {
 					gameWin.Refresh()
 				}
@@ -4085,7 +4201,7 @@ func makeQualityWindow() {
 		if ev.Type == eui.EventCheckboxChanged {
 			if gs.PixelArtScaling != ev.Checked {
 				gs.PixelArtScaling = ev.Checked
-				settingsDirty = true
+				settingsDirty.Store(true)
 				if gameWin != nil {
 					gameWin.Refresh()
 				}
@@ -4103,7 +4219,7 @@ func makeQualityWindow() {
 						showFPSEvents.Handle = func(ev eui.UIEvent) {
 							if ev.Type == eui.EventCheckboxChanged {
 								gs.ShowFPS = ev.Checked
-								settingsDirty = true
+								settingsDirty.Store(true)
 							}
 						}
 						flow.AddItem(showFPSCB)
@@ -4124,7 +4240,7 @@ func makeQualityWindow() {
 				}
 				go precacheAssets()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if qualityWin != nil {
 				qualityWin.Refresh()
 			}
@@ -4153,7 +4269,7 @@ func makeQualityWindow() {
 				}
 				go precacheAssets()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if qualityWin != nil {
 				qualityWin.Refresh()
 			}
@@ -4180,7 +4296,7 @@ func makeQualityWindow() {
 			if ev.Checked {
 				clearCaches()
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if qualityPresetDD != nil {
 				qualityPresetDD.Selected = detectQualityPreset()
 			}
@@ -4197,7 +4313,7 @@ func makeQualityWindow() {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.vsync = ev.Checked
 			ebiten.SetVsyncEnabled(gs.vsync)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(vsyncCB)
@@ -4212,7 +4328,7 @@ func makeQualityWindow() {
 	shaderQualityEv.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.ShaderLighting = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if qualityPresetDD != nil {
 				qualityPresetDD.Selected = detectQualityPreset()
 			}
@@ -4242,7 +4358,7 @@ func makeQualityWindow() {
 	shaderLightEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.ShaderLightStrength = float64(ev.Value / 100)
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if debugWin != nil {
 				debugWin.Refresh()
 			}
@@ -4263,7 +4379,7 @@ func makeQualityWindow() {
 	shaderGlowEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.ShaderGlowStrength = float64(ev.Value / 100)
-			settingsDirty = true
+			settingsDirty.Store(true)
 			if debugWin != nil {
 				debugWin.Refresh()
 			}
@@ -4298,7 +4414,7 @@ func makeQualityWindow() {
 					clImages.SetGammaCorrection(gs.SpriteGammaCorrection, gs.SpriteGamma, gs.MonitorGamma)
 				}
 				clearCaches()
-				settingsDirty = true
+				settingsDirty.Store(true)
 				if qualityWin != nil {
 					qualityWin.Refresh()
 				}
@@ -4330,7 +4446,7 @@ func makeQualityWindow() {
 				if gs.SpriteGammaCorrection {
 					clearCaches()
 				}
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 	}
@@ -4359,7 +4475,7 @@ func makeQualityWindow() {
 				if gs.SpriteGammaCorrection {
 					clearCaches()
 				}
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 	}
@@ -4387,7 +4503,7 @@ func makeQualityWindow() {
 				clImages.Denoise = ev.Checked
 			}
 			clearCaches()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(denoiseCB)
@@ -4406,7 +4522,7 @@ func makeQualityWindow() {
 				clImages.DenoiseSharpness = gs.DenoiseSharpness
 			}
 			clearCaches()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(denoiseSharpSlider)
@@ -4425,7 +4541,7 @@ func makeQualityWindow() {
 				clImages.DenoiseAmount = gs.DenoiseAmount
 			}
 			clearCaches()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	left.AddItem(denoiseAmtSlider)
@@ -4446,7 +4562,7 @@ func makeQualityWindow() {
 	motionEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.MotionSmoothing = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(motionCB)
@@ -4460,7 +4576,7 @@ func makeQualityWindow() {
 	pinEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.ObjectPinning = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(pinCB)
@@ -4475,7 +4591,7 @@ func makeQualityWindow() {
 		noSmoothEvents.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventCheckboxChanged {
 				gs.smoothMoving = ev.Checked
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 		center.AddItem(noSmoothCB)
@@ -4497,7 +4613,7 @@ func makeQualityWindow() {
 	animEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.BlendMobiles = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			mobileBlendCache = map[mobileBlendKey]*ebiten.Image{}
 		}
 	}
@@ -4512,7 +4628,7 @@ func makeQualityWindow() {
 	pictBlendEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.BlendPicts = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			pictBlendCache = map[pictBlendKey]*ebiten.Image{}
 		}
 	}
@@ -4528,7 +4644,7 @@ func makeQualityWindow() {
 	mobileBlendEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.MobileBlendAmount = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(mobileBlendSlider)
@@ -4543,7 +4659,7 @@ func makeQualityWindow() {
 	blendEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.BlendAmount = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(blendSlider)
@@ -4559,7 +4675,7 @@ func makeQualityWindow() {
 	mobileFramesEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.MobileBlendFrames = int(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(mobileFramesSlider)
@@ -4575,7 +4691,7 @@ func makeQualityWindow() {
 	pictFramesEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.PictBlendFrames = int(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	center.AddItem(pictFramesSlider)
@@ -4609,7 +4725,7 @@ func makeNotificationsWindow() {
 		events.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventCheckboxChanged {
 				*val = ev.Checked
-				settingsDirty = true
+				settingsDirty.Store(true)
 				if val == &gs.NotificationBeep {
 					updateSoundVolume()
 				}
@@ -4637,7 +4753,7 @@ func makeNotificationsWindow() {
 	durEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.NotificationDuration = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	flow.AddItem(durSlider)
@@ -4755,7 +4871,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.ScriptSpamKill = ev.Checked
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	toolsCol.AddItem(scriptKillCB)
@@ -4768,7 +4884,7 @@ func makeAdvancedSettingsWindow() {
 	autoRecEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.AutoRecord = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	toolsCol.AddItem(autoRecCB)
@@ -4784,7 +4900,7 @@ func makeAdvancedSettingsWindow() {
 	splashEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.ShowClanLordSplashImage = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 			prepareClassicSplash()
 		}
 	}
@@ -4801,7 +4917,7 @@ func makeAdvancedSettingsWindow() {
 
 			gs.AlwaysOnTop = ev.Checked
 			ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(alwaysTopCB)
@@ -4817,7 +4933,7 @@ func makeAdvancedSettingsWindow() {
 			gs.MiddleClickMoveWindow = ev.Checked
 			eui.SetMiddleClickMove(ev.Checked)
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(midMove)
@@ -4833,7 +4949,7 @@ func makeAdvancedSettingsWindow() {
 			gs.ShowPinToLocations = ev.Checked
 			SettingsLock.Unlock()
 			eui.SetShowPinLocations(ev.Checked)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(pinLocCB)
@@ -4848,7 +4964,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			defer SettingsLock.Unlock()
 			gs.TransparentWindow = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(transparentCB)
@@ -4868,7 +4984,7 @@ func makeAdvancedSettingsWindow() {
 			defer SettingsLock.Unlock()
 			gs.WindowBGColor = bgColorWheel.WheelColor
 			updateDimmedScreenBG()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(bgColorWheel)
@@ -4882,7 +4998,7 @@ func makeAdvancedSettingsWindow() {
 	fadePicsEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.FadeObscuringPictures = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(fadePicsCB)
@@ -4896,10 +5012,46 @@ func makeAdvancedSettingsWindow() {
 	obscureEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.ObscuringPictureOpacity = float64(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	interfaceCol.AddItem(obscureSlider)
+
+	addSectionLabel(interfaceCol, "Cursor")
+
+	cursorNormInput, cursorNormEvents := eui.NewInput()
+	cursorNormInput.Label = "Normal cursor file"
+	cursorNormInput.Text = gs.CursorNormalFile
+	cursorNormInput.TextPtr = &gs.CursorNormalFile
+	cursorNormInput.Size = eui.Point{X: columnWidth, Y: 24}
+	cursorNormInput.SetTooltip("Path to cursor image (.png, .jpg, .ico)")
+	cursorNormEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			SettingsLock.Lock()
+			gs.CursorNormalFile = ev.Text
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			markCursorDirty()
+		}
+	}
+	interfaceCol.AddItem(cursorNormInput)
+
+	cursorMoveInput, cursorMoveEvents := eui.NewInput()
+	cursorMoveInput.Label = "Move cursor file"
+	cursorMoveInput.Text = gs.CursorMoveFile
+	cursorMoveInput.TextPtr = &gs.CursorMoveFile
+	cursorMoveInput.Size = eui.Point{X: columnWidth, Y: 24}
+	cursorMoveInput.SetTooltip("Path to cursor image for walk mode (.png, .jpg, .ico)")
+	cursorMoveEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			SettingsLock.Lock()
+			gs.CursorMoveFile = ev.Text
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			markCursorDirty()
+		}
+	}
+	interfaceCol.AddItem(cursorMoveInput)
 
 	// Chat & TTS column
 	addSectionLabel(chatCol, "Chat & TTS")
@@ -4915,7 +5067,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.TimestampFormat = ev.Text
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 			updateChatWindow()
 			updateConsoleWindow()
 		}
@@ -4933,6 +5085,9 @@ func makeAdvancedSettingsWindow() {
 		}
 	}
 	chatCol.AddItem(bubbleBtn)
+
+	// System column (audio, network, performance)
+	addSectionLabel(chatCol, "Audio")
 
 	voiceDD, voiceEvents := eui.NewDropdown()
 	voiceDD.Label = "TTS Voice"
@@ -4963,7 +5118,7 @@ func makeAdvancedSettingsWindow() {
 				SettingsLock.Lock()
 				gs.ChatTTSVoice = voices[sel]
 				SettingsLock.Unlock()
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 	}
@@ -4973,7 +5128,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.ChatTTSVoice = voiceDD.Options[ev.Index]
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 			piperModel = ""
 			piperConfig = ""
 			stopAllTTS()
@@ -4999,7 +5154,7 @@ func makeAdvancedSettingsWindow() {
 		if ev.Type == eui.EventClick {
 			if !gs.ChatTTS {
 				gs.ChatTTS = true
-				settingsDirty = true
+				settingsDirty.Store(true)
 				if ttsMixCB != nil {
 					ttsMixCB.Checked = true
 				}
@@ -5023,8 +5178,71 @@ func makeAdvancedSettingsWindow() {
 	}
 	chatCol.AddItem(ttsEditBtn)
 
-	// System column (audio, network, performance)
-	addSectionLabel(chatCol, "Audio")
+	ttsBlockLabel, _ := eui.NewText()
+	ttsBlockLabel.Text = "Blocked TTS speakers:"
+	ttsBlockLabel.FontSize = 12
+	ttsBlockLabel.Size = eui.Point{X: columnWidth, Y: 20}
+	chatCol.AddItem(ttsBlockLabel)
+
+	ttsBlockText, _ := eui.NewText()
+	ttsBlockText.FontSize = 10
+	ttsBlockText.Size = eui.Point{X: columnWidth, Y: 40}
+	updateTTSBlockText := func() {
+		ttsBlocklistMu.RLock()
+		list := strings.Join(gs.ChatTTSBlocklist, ", ")
+		ttsBlocklistMu.RUnlock()
+		if list == "" {
+			list = "(none)"
+		}
+		ttsBlockText.Text = list
+	}
+	updateTTSBlockText()
+	chatCol.AddItem(ttsBlockText)
+
+	ttsBlockAddRow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL}
+	ttsBlockAddInput, ttsBlockAddEvents := eui.NewInput()
+	ttsBlockAddInput.Size = eui.Point{X: columnWidth - 48, Y: 24}
+	ttsBlockAddEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			_ = ev.Text
+		}
+	}
+	ttsBlockAddRow.AddItem(ttsBlockAddInput)
+	ttsBlockAddBtn, ttsBlockAddBtnEvents := eui.NewButton()
+	ttsBlockAddBtn.Text = "Add"
+	ttsBlockAddBtn.Size = eui.Point{X: 44, Y: 24}
+	ttsBlockAddBtnEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			name := strings.TrimSpace(ttsBlockAddInput.Text)
+			if name != "" {
+				addTTSBlockedName(name)
+				updateTTSBlockText()
+				ttsBlockAddInput.Text = ""
+			}
+		}
+	}
+	ttsBlockAddRow.AddItem(ttsBlockAddBtn)
+	chatCol.AddItem(ttsBlockAddRow)
+
+	ttsGuideBtn, ttsGuideEvents := eui.NewButton()
+	ttsGuideBtn.Text = "Piper Voice Add Guide"
+	ttsGuideBtn.Size = eui.Point{X: columnWidth, Y: 24}
+	ttsGuideEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			makePiperGuideWindow()
+		}
+	}
+	chatCol.AddItem(ttsGuideBtn)
+
+	ttsVoicesBtn, ttsVoicesEvents := eui.NewButton()
+	ttsVoicesBtn.Text = "More Piper voices..."
+	ttsVoicesBtn.Size = eui.Point{X: columnWidth, Y: 24}
+	ttsVoicesEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			open.Run("https://rhasspy.github.io/piper-samples/")
+		}
+	}
+	chatCol.AddItem(ttsVoicesBtn)
 
 	throttleCB, throttleEvents := eui.NewCheckbox()
 	throttleSoundCB = throttleCB
@@ -5036,7 +5254,7 @@ func makeAdvancedSettingsWindow() {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.ThrottleSounds = ev.Checked
 			clearCaches()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	chatCol.AddItem(throttleSoundCB)
@@ -5060,7 +5278,7 @@ func makeAdvancedSettingsWindow() {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.SoundEnhancement = ev.Checked
 			enhancementStrengthSlider.Disabled = !ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	chatCol.AddItem(enhancementCB)
@@ -5068,7 +5286,7 @@ func makeAdvancedSettingsWindow() {
 	enhancementStrengthEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.SoundEnhancementAmount = clampSoundEnhancementAmount(float64(ev.Value))
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	chatCol.AddItem(enhancementStrengthSlider)
@@ -5084,7 +5302,7 @@ func makeAdvancedSettingsWindow() {
 			gs.HighQualityResampling = ev.Checked
 			setHighQualityResamplingEnabled(ev.Checked)
 			clearCaches()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	chatCol.AddItem(resampleCB)
@@ -5098,7 +5316,7 @@ func makeAdvancedSettingsWindow() {
 	musicEnhancementEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.MusicEnhancement = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	chatCol.AddItem(musicEnhancementCB)
@@ -5113,7 +5331,7 @@ func makeAdvancedSettingsWindow() {
 	altNetEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.altNetMode = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	systemCol.AddItem(altNetCB)
@@ -5127,7 +5345,7 @@ func makeAdvancedSettingsWindow() {
 	netDelayEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventSliderChanged {
 			gs.altNetDelay = int(ev.Value)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	systemCol.AddItem(netDelaySlider)
@@ -5143,7 +5361,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.ServerAddress = strings.TrimSpace(ev.Text)
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 			applyServerAddressSetting()
 		}
 	}
@@ -5203,7 +5421,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.PowerSaveBackground = ev.Checked
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	systemCol.AddItem(psBGCB)
@@ -5218,7 +5436,7 @@ func makeAdvancedSettingsWindow() {
 			SettingsLock.Lock()
 			gs.PowerSaveAlways = ev.Checked
 			SettingsLock.Unlock()
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	systemCol.AddItem(psAlwaysCB)
@@ -5250,7 +5468,7 @@ func makeAdvancedSettingsWindow() {
 			gs.PowerSaveFPS = v
 			SettingsLock.Unlock()
 			psFPSSlider.Value = float32(v)
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	systemCol.AddItem(psFPSSlider)
@@ -5288,7 +5506,7 @@ func makeBubbleWindow() {
 	bubblesQuickEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.SpeechBubbles = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	flow.AddItem(bubblesQuickCB)
@@ -5301,7 +5519,7 @@ func makeBubbleWindow() {
 		events.Handle = func(ev eui.UIEvent) {
 			if ev.Type == eui.EventCheckboxChanged {
 				*val = ev.Checked
-				settingsDirty = true
+				settingsDirty.Store(true)
 			}
 		}
 		flow.AddItem(cb)
@@ -5349,7 +5567,7 @@ func makeDebugWindow() {
 	recordStatsEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.recordAssetStats = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(recordStatsCB)
@@ -5362,7 +5580,7 @@ func makeDebugWindow() {
 	hideMoveEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.hideMoving = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(hideMoveCB)
@@ -5375,7 +5593,7 @@ func makeDebugWindow() {
 	hideMobEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.hideMobiles = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(hideMobCB)
@@ -5388,7 +5606,7 @@ func makeDebugWindow() {
 	planesEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.imgPlanesDebug = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(planesCB)
@@ -5401,7 +5619,7 @@ func makeDebugWindow() {
 	pictIDEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.pictIDDebug = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(pictIDCB)
@@ -5413,7 +5631,7 @@ func makeDebugWindow() {
 	scriptOutEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.scriptOutputDebug = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(scriptOutCB)
@@ -5475,7 +5693,7 @@ func makeDebugWindow() {
 			case 5:
 				gs.forceNightLevel = 100
 			}
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(forceNightDD)
@@ -5487,7 +5705,7 @@ func makeDebugWindow() {
 	smoothinEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.smoothingDebug = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(smoothinCB)
@@ -5498,7 +5716,7 @@ func makeDebugWindow() {
 	pictAgainEvents.Handle = func(ev eui.UIEvent) {
 		if ev.Type == eui.EventCheckboxChanged {
 			gs.pictAgainDebug = ev.Checked
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 	debugFlow.AddItem(pictAgainCB)

@@ -223,8 +223,7 @@ func macroExecuteSetVar(ex *ExecutingMacro, cmd *Macro, global bool) bool {
 	if len(cmd.Params) < 2 {
 		return false
 	}
-	// The variable name is always a literal — do not resolve it through variable lookup
-	name := cmd.Params[0].VarName
+	name := macroResolveBrackets(cmd.Params[0].VarName)
 
 	if len(cmd.Params) == 2 {
 		// set name value

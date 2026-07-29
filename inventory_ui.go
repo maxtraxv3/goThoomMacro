@@ -9,6 +9,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -19,7 +20,7 @@ import (
 
 var inventoryWin *eui.WindowData
 var inventoryList *eui.ItemData
-var inventoryDirty bool
+var inventoryDirty atomic.Bool
 
 type invRef struct {
 	id     uint16

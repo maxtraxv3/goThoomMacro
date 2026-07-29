@@ -642,6 +642,35 @@ func (g *Game) Update() error {
 	checkForScriptEdit()
 	updateNotifications()
 	updateThinkMessages()
+	// Process deferred UI updates set by consoleMessage/chatMessage on the
+	// network goroutine. Running these here avoids data races on the EUI item
+	// tree between the network goroutine and the draw goroutine.
+	if consoleDirty.CompareAndSwap(true, false) {
+		updateConsoleWindow()
+	}
+	processConsoleUnhighlight()
+	if chatDirty.CompareAndSwap(true, false) {
+		updateChatWindow()
+	}
+	// Process deferred UI updates from script goroutines.
+	if scriptsListDirty.CompareAndSwap(true, false) {
+		refreshscriptsWindow()
+	}
+	if hotkeysListDirty.CompareAndSwap(true, false) {
+		refreshHotkeysList()
+	}
+	if triggersListDirty.CompareAndSwap(true, false) {
+		refreshTriggersList()
+	}
+	if scriptDebugDirty.CompareAndSwap(true, false) {
+		refreshscriptDebug()
+	}
+	if v := pendingNotification.Load(); v != nil {
+		if msg, ok := v.(string); ok && msg != "" {
+			pendingNotification.Store("")
+			showNotification(msg)
+		}
+	}
 	// Throttle player maintenance to reduce idle CPU (every ~250ms)
 	if now.Sub(lastPlayersRefreshTick) >= 250*time.Millisecond {
 		requestPlayersData()
@@ -711,38 +740,38 @@ func (g *Game) Update() error {
 		updateJoystickWindow()
 	}
 
-	if inventoryDirty {
+	if inventoryDirty.CompareAndSwap(true, false) {
 		updateInventoryWindow()
 		updateHandsWindow()
-		inventoryDirty = false
 	}
 
-	if playersDirty {
+	if playersDirty.CompareAndSwap(true, false) {
 		updatePlayersWindow()
-		playersDirty = false
 	}
 
 	if syncWindowSettings() {
-		settingsDirty = true
+		settingsDirty.Store(true)
 	}
 
 	if now.Sub(lastQualityPresetCheck) >= time.Second {
-		if settingsDirty && qualityPresetDD != nil {
+		if settingsDirty.Load() && qualityPresetDD != nil {
 			qualityPresetDD.Selected = detectQualityPreset()
 		}
 		lastQualityPresetCheck = now
 	}
 
 	if now.Sub(lastSettingsSave) >= time.Second {
-		if settingsDirty {
+		if settingsDirty.Load() {
 			saveSettings()
-			settingsDirty = false
+			settingsDirty.Store(false)
 		}
 		lastSettingsSave = now
 	}
 
+	updateCustomCursors()
+
 	if now.Sub(lastPlayersSave) >= 10*time.Second {
-		if clmov == "" && !playingMovie && (playersDirty || playersPersistDirty) {
+		if clmov == "" && !playingMovie && (playersDirty.Load() || playersPersistDirty) {
 			savePlayersPersist()
 			playersPersistDirty = false
 		}
@@ -1178,7 +1207,9 @@ func (g *Game) Update() error {
 	}
 
 	/* Change Cursor */
-	if walk && !keyWalk {
+	if useCustomCursors {
+		// Handled by drawCustomCursor in Draw()
+	} else if walk && !keyWalk {
 		ebiten.SetCursorShape(ebiten.CursorShapeCrosshair)
 	} else {
 		ebiten.SetCursorShape(ebiten.CursorShapeDefault)
@@ -1543,6 +1574,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		op.GeoM.Translate(x, y)
 		text.Draw(screen, "SEEKING...", mainFontBold, op)
 		releaseTextDrawOpts(op)
+	}
+
+	// Custom cursor overlay (when enabled, hides system cursor)
+	customCursorMu.RLock()
+	useCustom := useCustomCursors
+	customCursorMu.RUnlock()
+	if useCustom {
+		walk := false
+		if !uiMouseDown && gs.ClickToToggle {
+			walk = walkToggled
+		}
+		drawCustomCursor(screen, walk)
 	}
 }
 
@@ -2292,6 +2335,7 @@ func drawMobileNameTag(screen *ebiten.Image, snap drawSnapshot, m frameMobile, a
 		}
 		if showName {
 			style := styleRegular
+			underline := false
 			playersMu.RLock()
 			if p, ok := players[d.Name]; ok {
 				if p.Sharing && p.Sharee {
@@ -2301,9 +2345,12 @@ func drawMobileNameTag(screen *ebiten.Image, snap drawSnapshot, m frameMobile, a
 				} else if p.Sharee {
 					style = styleItalic
 				}
+				if p.Sharee {
+					underline = true
+				}
 			}
 			playersMu.RUnlock()
-			if m.nameTag != nil && m.nameTagKey.FontGen == fontGen && m.nameTagKey.Opacity == nameAlpha && m.nameTagKey.Text == d.Name && m.nameTagKey.Colors == m.Colors && m.nameTagKey.Style == style {
+			if m.nameTag != nil && m.nameTagKey.FontGen == fontGen && m.nameTagKey.Opacity == nameAlpha && m.nameTagKey.Text == d.Name && m.nameTagKey.Colors == m.Colors && m.nameTagKey.Style == style && m.nameTagKey.Underline == underline {
 				top := y + int(offset)
 				left := x - int(float64(m.nameTagW)/2)
 				op := acquireDrawOpts()
@@ -2325,7 +2372,7 @@ func drawMobileNameTag(screen *ebiten.Image, snap drawSnapshot, m frameMobile, a
 					playersMu.RUnlock()
 				}
 				frameClr.A = nameAlpha
-				img, iw, ih := buildNameTagImage(d.Name, m.Colors, nameAlpha, style, frameClr)
+				img, iw, ih := buildNameTagImage(d.Name, m.Colors, nameAlpha, style, frameClr, underline)
 				if img != nil {
 					// Update shared cache so next frames reuse this image.
 					stateMu.Lock()
@@ -2333,7 +2380,7 @@ func drawMobileNameTag(screen *ebiten.Image, snap drawSnapshot, m frameMobile, a
 						sm.nameTag = img
 						sm.nameTagW = iw
 						sm.nameTagH = ih
-						sm.nameTagKey = nameTagKey{Text: d.Name, Colors: m.Colors, Opacity: nameAlpha, FontGen: fontGen, Style: style}
+						sm.nameTagKey = nameTagKey{Text: d.Name, Colors: m.Colors, Opacity: nameAlpha, FontGen: fontGen, Style: style, Underline: underline}
 						state.mobiles[m.Index] = sm
 					}
 					stateMu.Unlock()
@@ -2661,7 +2708,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 		if gs.WindowWidth != outsideWidth || gs.WindowHeight != outsideHeight {
 			gs.WindowWidth = outsideWidth
 			gs.WindowHeight = outsideHeight
-			settingsDirty = true
+			settingsDirty.Store(true)
 		}
 	}
 

@@ -4,6 +4,7 @@ package main
 
 import (
 	"gothoom/eui"
+	"sync/atomic"
 	"time"
 
 	clipboard "golang.design/x/clipboard"
@@ -13,6 +14,8 @@ var consoleWin *eui.WindowData
 var messagesFlow *eui.ItemData
 var inputFlow *eui.ItemData
 var consoleHighlighted *eui.ItemData
+var consoleUnhighlightPending atomic.Bool
+var consoleUnhighlightTime time.Time
 
 func updateConsoleWindow() {
 	if consoleWin == nil {
@@ -26,6 +29,19 @@ func updateConsoleWindow() {
 
 	msgs := getConsoleMessages()
 	updateTextWindow(consoleWin, messagesFlow, inputFlow, msgs, gs.ConsoleFontSize, inputMsg, nil)
+	// Apply per-message colors when ConsoleColors is enabled.
+	if gs.ConsoleColors && messagesFlow != nil {
+		for i, msg := range msgs {
+			if i < len(messagesFlow.Contents) {
+				if c := consoleMessageColor(msg); c != nil {
+					messagesFlow.Contents[i].TextColor = eui.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+					messagesFlow.Contents[i].ForceTextColor = true
+				} else {
+					messagesFlow.Contents[i].ForceTextColor = false
+				}
+			}
+		}
+	}
 	searchTextWindow(consoleWin, messagesFlow, consoleWin.SearchText)
 	if inputFlow != nil && len(inputFlow.Contents) > 0 {
 		inputItem := inputFlow.Contents[0]
@@ -176,15 +192,25 @@ func handleConsoleCopyRightClick(mx, my int) bool {
 }
 
 func scheduleConsoleUnhighlight(row *eui.ItemData) {
-	go func(target *eui.ItemData) {
-		time.Sleep(1200 * time.Millisecond)
-		if consoleHighlighted == target {
-			target.Filled = false
-			target.Focused = false
-			if consoleWin != nil {
-				consoleWin.Refresh()
-			}
-			consoleHighlighted = nil
+	consoleUnhighlightTime = time.Now().Add(1200 * time.Millisecond)
+	consoleUnhighlightPending.Store(true)
+}
+
+// processConsoleUnhighlight is called from Game.Update() on the draw goroutine.
+func processConsoleUnhighlight() {
+	if !consoleUnhighlightPending.CompareAndSwap(true, false) {
+		return
+	}
+	if time.Now().Before(consoleUnhighlightTime) {
+		consoleUnhighlightPending.Store(true)
+		return
+	}
+	if consoleHighlighted != nil {
+		consoleHighlighted.Filled = false
+		consoleHighlighted.Focused = false
+		if consoleWin != nil {
+			consoleWin.Refresh()
 		}
-	}(row)
+		consoleHighlighted = nil
+	}
 }

@@ -534,7 +534,9 @@ func runLoginAttempt(ctx context.Context, target serverTarget, sendVersion int, 
 		udp = nil
 		return fmt.Errorf("character password required")
 	}
+	logDebug("login: name=%q passLen=%d passHashLen=%d", name, len(pass), len(passHash))
 	playerName = utfFold(name)
+	addTTSBlockedName(playerName)
 	applyLocalLabels()
 	applyEnabledScripts()
 	loadShortcuts()
