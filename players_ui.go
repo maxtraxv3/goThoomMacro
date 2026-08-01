@@ -340,6 +340,39 @@ func selectPlayer(name string) {
 	updatePlayersWindow()
 }
 
+// handleSelect searches the player list for a matching name and selects it.
+func handleSelect(name string) {
+	name = cleanMacroArg(name)
+	if name == "" {
+		consoleMessage("Usage: /select <player name>")
+		return
+	}
+	ps := getPlayers()
+	norm := strings.ToLower(strings.TrimSpace(name))
+	// First pass: exact match
+	for _, p := range ps {
+		if strings.ToLower(p.Name) == norm {
+			selectPlayer(p.Name)
+			return
+		}
+	}
+	// Second pass: prefix match
+	for _, p := range ps {
+		if strings.HasPrefix(strings.ToLower(p.Name), norm) {
+			selectPlayer(p.Name)
+			return
+		}
+	}
+	// Third pass: substring match
+	for _, p := range ps {
+		if strings.Contains(strings.ToLower(p.Name), norm) {
+			selectPlayer(p.Name)
+			return
+		}
+	}
+	consoleMessage(fmt.Sprintf("No player named '%s' found in the player list.", name))
+}
+
 func openPlayersContextMenu(name string, pos eui.Point) {
 	// Close any existing context menus.
 	eui.CloseContextMenus()

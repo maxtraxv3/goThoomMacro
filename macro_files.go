@@ -191,6 +191,21 @@ func macroExecLogin() {
 	logWarn("[macro] no @login function found")
 }
 
+// macroFuncExists reports whether a function macro with the given name exists.
+func macroFuncExists(name string) bool {
+	if !strings.HasPrefix(name, "@") {
+		name = "@" + name
+	}
+	macroState.mu.Lock()
+	defer macroState.mu.Unlock()
+	for m := macroState.Functions; m != nil; m = m.Next {
+		if m.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // macroExecFunc executes a function macro by name (without the @ prefix).
 func macroExecFunc(name string) {
 	if !strings.HasPrefix(name, "@") {

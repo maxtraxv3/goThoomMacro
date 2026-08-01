@@ -184,6 +184,67 @@ func nextCommand() {
 		return
 	}
 	pendingCommand = cmd
+	// Intercept client-side commands from macro execution
+	lower := strings.ToLower(cmd)
+	if strings.HasPrefix(lower, "/selectitem") {
+		pendingCommand = ""
+		arg := strings.TrimSpace(cmd[len("/selectitem"):])
+		handleSelectItem(arg)
+		return
+	}
+	if strings.HasPrefix(lower, "/select") {
+		pendingCommand = ""
+		arg := strings.TrimSpace(cmd[len("/select"):])
+		handleSelect(arg)
+		return
+	}
+}
+
+// handleClientCommand runs built-in or script-registered client commands
+// ("/command args"). It returns true when the command was handled client-side;
+// otherwise the caller should send the text to the server. This mirrors the
+// chat input dispatch and is also used for voice commands.
+func handleClientCommand(txt string) bool {
+	if !strings.HasPrefix(txt, "/") {
+		return false
+	}
+	lower := strings.ToLower(txt)
+	if strings.HasPrefix(lower, "/selectitem") {
+		consoleMessage("> " + txt)
+		arg := strings.TrimSpace(txt[len("/selectitem"):])
+		handleSelectItem(arg)
+		return true
+	}
+	if strings.HasPrefix(lower, "/select") {
+		consoleMessage("> " + txt)
+		arg := strings.TrimSpace(txt[len("/select"):])
+		handleSelect(arg)
+		return true
+	}
+	if strings.HasPrefix(lower, "/testhooks") {
+		consoleMessage("> " + txt)
+		arg := strings.TrimSpace(txt[len("/testhooks"):])
+		testScriptHooks(arg)
+		return true
+	}
+	parts := strings.SplitN(strings.TrimPrefix(txt, "/"), " ", 2)
+	name := strings.ToLower(parts[0])
+	args := ""
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+	if handler, ok := scriptCommands[name]; ok && handler != nil {
+		owner := scriptCommandOwners[name]
+		if !scriptDisabled[owner] {
+			consoleMessage("> " + txt)
+			scriptLogEvent(owner, "Command", args)
+			go handler(args)
+			return true
+		}
+		// Disabled script commands fall through so the server still
+		// receives the user's input.
+	}
+	return false
 }
 
 // updateFrameCounters tracks frame statistics and detects dropped frames.

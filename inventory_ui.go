@@ -57,6 +57,7 @@ type inventoryRenderState struct {
 	iconSize     int
 	clientWAvail float32
 	clientHAvail float32
+	scrollbarW   float32
 }
 
 var invRender inventoryRenderState
@@ -122,6 +123,9 @@ func makeInventoryWindow() {
 		return
 	}
 	inventoryWin, inventoryList, _ = makeTextWindow("Inventory", eui.HZoneLeft, eui.VZoneMiddleTop, true)
+	if inventoryWin.Size.X < 520 {
+		inventoryWin.Size.X = 520
+	}
 	inventoryWin.Searchable = true
 	inventoryWin.OnSearch = func(s string) { searchTextWindow(inventoryWin, inventoryList, s) }
 	// Ensure layout updates immediately on resize to avoid gaps.
@@ -198,6 +202,7 @@ func updateInventoryWindow() {
 	}
 	invRender.clientWAvail = clientWAvail
 	invRender.clientHAvail = clientHAvail
+	invRender.scrollbarW = eui.ScrollbarWidth() / scale
 
 	rows := make([]inventoryRowData, 0, len(order))
 	for _, key := range order {
@@ -323,7 +328,7 @@ func (s *inventoryRenderState) makeRowData(key invGroupKey, it InventoryItem, qt
 		slotText = fmt.Sprintf("[%v]", TitleCaser.String(slotNames[slot]))
 		if face != nil {
 			if w, _ := text.Measure(slotText, face, 0); w > 0 {
-				slotWidth = float32(math.Ceil(w / float64(s.uiScale)))
+				slotWidth = float32(math.Ceil(w/float64(s.uiScale))) + 6
 			}
 		}
 	}
@@ -409,7 +414,7 @@ func (s *inventoryRenderState) updateRow(row *inventoryRow, data inventoryRowDat
 		row.label.FontSize = float32(s.fontSize)
 		row.label.Face = data.face
 		row.label.Position = eui.Point{X: row.icon.Margin, Y: 0}
-		avail := s.clientWAvail - float32(s.iconSize) - row.icon.Margin - data.slotWidth
+		avail := s.clientWAvail - float32(s.iconSize) - row.icon.Margin - data.slotWidth - s.scrollbarW
 		if avail < 0 {
 			avail = 0
 		}
@@ -593,6 +598,68 @@ func selectInventoryItem(id uint16, idx int) {
 	enqueueCommand(fmt.Sprintf("\\BE-SELECT %d %d", id, serverIdx))
 	nextCommand()
 	updateInventoryWindow()
+}
+
+// cleanMacroArg strips quote/backslash artifacts from macro-parsed command arguments.
+// The parser doesn't handle \" escape sequences inside quoted strings, which can
+// leave backslashes and stray quote characters embedded in the resolved argument.
+func cleanMacroArg(s string) string {
+	s = strings.TrimSpace(s)
+	// Remove ALL backslash and double-quote characters (parser artifacts)
+	s = strings.ReplaceAll(s, "\\", "")
+	s = strings.ReplaceAll(s, "\"", "")
+	// Normalize <# NNN → <#NNN (token concatenation leaves spaces)
+	s = strings.ReplaceAll(s, "<# ", "<#")
+	s = strings.TrimSpace(s)
+	return s
+}
+
+// handleSelectItem searches inventory for an item matching name and selects it.
+// Matching is case-insensitive; exact Base match first, then prefix on Name.
+func handleSelectItem(name string) {
+	name = cleanMacroArg(name)
+	if name == "" {
+		selectedInvID = 0
+		selectedInvIdx = -1
+		updateInventoryWindow()
+		return
+	}
+	items := getInventory()
+	norm := normalizeInventoryName(name)
+	// First pass: exact Base match
+	for _, it := range items {
+		if normalizeInventoryName(it.Base) == norm {
+			selectInventoryItem(it.ID, it.IDIndex)
+			return
+		}
+	}
+	// Second pass: prefix match on Name
+	for _, it := range items {
+		if strings.HasPrefix(normalizeInventoryName(it.Name), norm) {
+			selectInventoryItem(it.ID, it.IDIndex)
+			return
+		}
+	}
+	// Third pass: substring match on Name
+	for _, it := range items {
+		if strings.Contains(normalizeInventoryName(it.Name), norm) {
+			selectInventoryItem(it.ID, it.IDIndex)
+			return
+		}
+	}
+	// Fourth pass: normalize spaces inside <#N...> patterns and retry
+	// Macros often insert spaces from token concatenation (e.g. "whatzit <#" + cknum → "whatzit <# 1")
+	clean := strings.ReplaceAll(norm, "<# ", "<#")
+	clean = strings.ReplaceAll(clean, "<#  ", "<#")
+	if clean != norm {
+		for _, it := range items {
+			if strings.Contains(normalizeInventoryName(it.Name), clean) {
+				selectInventoryItem(it.ID, it.IDIndex)
+				return
+			}
+		}
+	}
+	consoleMessage(fmt.Sprintf("No item named '%s' found in the item list.", name))
 }
 
 // handleInventoryContextClick opens the inventory context menu if the mouse

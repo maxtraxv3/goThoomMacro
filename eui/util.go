@@ -1378,6 +1378,12 @@ func (win *windowData) updateAutoSize() {
 
 	// Always include the titlebar height in the calculated size
 	size.Y = req.Y + win.GetTitleSize() + 2*pad
+	if win.MaxWidth > 0 && size.X > win.MaxWidth {
+		size.X = win.MaxWidth
+	}
+	if win.MaxHeight > 0 && size.Y > win.MaxHeight {
+		size.Y = win.MaxHeight
+	}
 	if size.X > float32(screenWidth) {
 		size.X = float32(screenWidth)
 	}

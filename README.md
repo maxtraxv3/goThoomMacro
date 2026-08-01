@@ -36,6 +36,22 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - Color-coded console messages: yells, ponders, thinks, narrates, actions, coins — each with individually customizable color via HSV color picker in Settings. Click "Customize Colors..." after enabling. Defaults: yell=yellow, action=red, think/narrate=green, ponder=purple, coin=gold. Enabled by default, toggle in Settings.
 - TTS blocklist management in Advanced Settings (add blocked speakers, "More Piper voices..." link to download additional voices)
 
+### Speech to Text (Vosk)
+
+Offline speech-to-text powered by Vosk, with no cloud service:
+
+- **Dictate to chat**: say what you want, and it's sent as a chat message
+- **Voice commands**: say a phrase from `data/stt_commands.txt` to run a command or macro function (e.g. `sit down = @sit`)
+- **Mic selection**: pick your microphone in Settings (the OS default is sometimes wrong)
+- **Model selection**: choose your Vosk model in Settings > Speech to Text. The default full US English model (`vosk-model-en-us-0.22`, ~1.8 GB) recognizes most reliably; smaller models such as `vosk-model-en-us-0.22-lgraph` (~130 MB) and `vosk-model-small-en-us-0.15` (~40 MB) are available for faster downloads at the cost of accuracy
+- **Activation**: "Start/Stop listening" button in Settings, plus an optional hotkey — either push-to-talk (hold) or toggle
+- **Auto-gain**: quiet microphones are boosted automatically so Vosk hears them clearly
+- **Noise gate**: an adaptive gate feeds Vosk silence between speech, and standalone filler words ("the", "and", "um") are dropped, preventing hallucinated words from reaching chat
+- **Mishear aliases**: add phrases to `data/stt_commands.txt` that map common mishearings to the same command (e.g. `poe's=\POSE {text}`)
+- **Setup**: tick "Download Vosk files" in the Downloads window, or run `build-scripts/download_vosk.sh`. This fetches the native `libvosk` library into `data/vosk/` and a model (default `vosk-model-en-us-0.22`, ~1.8 GB)
+- Hotkey format matches macro key names, e.g. `shift-f9` or `command-space`
+- Only enabled when the `STTEnabled` setting is on; requires cgo (unavailable in the web/wasm build)
+
 ### Gamepad / Controller Support
 
 - Full gamepad input with per-stick walk and cursor movement
@@ -83,6 +99,10 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - Auto-blocks your own character from TTS on login (added to TTS blocklist)
 - TTS blocklist management UI in Advanced Settings (add names, view blocked list, link to download more Piper voices)
 - Numpad keys (numpad-0 through numpad-9) now work in key macros — `keyNameToCode` was missing digit entries, causing `numpad-1` etc. to silently fail to parse
+- Inventory item names bug fixed: item custom names (e.g., whatzit creature info) now display correctly in the inventory
+- Equipped location text (e.g., `[Feet]`) in the inventory window is no longer cut off and is now fully readable
+- Speech-to-text (Vosk) uses a prebuilt native library loaded at runtime, so no Vosk source build is needed
+- Speech-to-text now hears audio correctly: mic samples were being fed at ±1.0 instead of the int16 scale (±32767) Vosk's float API expects, which made the input ~32768x too quiet (Vosk heard silence)
 
 ### Auto-Update (Client Binary)
 
@@ -142,6 +162,18 @@ All original features are preserved, including:
    ```
    If `clientVersion` is left as the default (`dev`), auto-update is disabled.
 
+### Speech to Text assets
+
+Speech-to-text needs the Vosk model and native library in `data/vosk/`. Tick
+"Download Vosk files" in the client's Downloads window, or run:
+
+```bash
+build-scripts/download_vosk.sh
+```
+
+The library is extracted from official Vosk release archives; no source build
+is required.
+
 ### Cross-compilation (Linux, Windows, macOS, RPi, Web)
 
 Use `build-scripts/build_binaries.sh` or `build-scripts/build_binaries_local.sh` to build for all targets at once. These scripts:
@@ -156,6 +188,36 @@ Use `build-scripts/build_binaries.sh` or `build-scripts/build_binaries_local.sh`
 - Original goThoom client by [Distortions81](https://github.com/Distortions81) ([goThoom](https://github.com/Distortions81/goThoom))
 - Clan Lord is a trademark of Delta Tao Research Corporation
 - Built in Go with the [Ebiten](https://ebitengine.org/) game library
+
+## Third-Party Libraries
+
+- **Ebitengine** — Apache-2.0 — Hajime Hoshi (https://github.com/hajimehoshi/ebiten)
+- **go-humanize** — MIT — Dustin Sallings (https://github.com/dustin/go-humanize)
+- **piper** — MIT — Amity Bell (https://github.com/fresh-cut/piper)
+- **gopacket** — BSD-3-Clause — Google, Inc.; Andreas Krennmair (https://github.com/google/gopacket)
+- **durafmt** — MIT — Wesley Hill (https://github.com/hako/durafmt)
+- **rich-go** — MIT — Hugo Lageneste (https://github.com/hugolgst/rich-go)
+- **sizedwaitgroup** — MIT — Rémy Mathieu (https://github.com/remeh/sizedwaitgroup)
+- **go-meltysynth** — MIT — Nobuaki Tanaka (https://github.com/sinshu/go-meltysynth)
+- **dialog** — ISC — sqweek and contributors (https://github.com/sqweek/dialog)
+- **dark-mode-go** — MIT — Thiago Kenji Okada (https://github.com/thiagokokada/dark-mode-go)
+- **clipboard** — MIT — Changkun Ou (https://github.com/golang-design/clipboard)
+- **x/crypto** — BSD-3-Clause — The Go Authors (https://github.com/golang/crypto)
+- **x/text** — BSD-3-Clause — The Go Authors (https://github.com/golang/text)
+- **x/time** — BSD-3-Clause — The Go Authors (https://github.com/golang/time)
+- **beeep** — BSD-2-Clause — Milan Nikolic (https://github.com/gen2brain/beeep)
+- **malgo** — The Unlicense (public domain) — Eugene Pirogov; wraps miniaudio (https://github.com/gen2brain/malgo)
+- **browser** — BSD-2-Clause — Dave Cheney (https://github.com/pkg/browser)
+- **open-golang** — MIT — skratchdot (https://github.com/skratchdot/open-golang)
+- **spellchecker** — MIT — cyradin (https://github.com/f1monkey/spellchecker)
+- **yaegi** — Apache-2.0 — Traefik Labs (https://github.com/traefik/yaegi)
+- **x/image** — BSD-3-Clause — The Go Authors (https://github.com/golang/image)
+
+### Speech-to-Text
+
+- **Vosk** — Apache-2.0 — Alpha Cephei (https://github.com/alphacep/vosk-api)
+- **Vosk models** (small-en-us-0.15, en-us-0.22-lgraph, en-us-0.22) — Apache-2.0 — Alpha Cephei (https://alphacephei.com/vosk/models)
+- **miniaudio** — Public Domain / MIT-0 — David Reid (https://github.com/mackron/miniaudio)
 
 ## License
 

@@ -223,6 +223,13 @@ var gsdef settings = settings{
 	// Window behavior
 	ShowClanLordSplashImage: true,
 
+	STTEnabled:       false,
+	STTModel:         "vosk-model-en-us-0.22",
+	STTMicrophone:    "",
+	STTHotkey:        "",
+	STTHotkeyToggle:  false,
+	STTDictateToChat: true,
+
 	//Unexported
 	vsync:             true,
 	precacheSounds:    false,
@@ -414,6 +421,14 @@ type settings struct {
 	precacheImages          bool
 	smoothMoving            bool
 	recordAssetStats        bool
+
+	// Speech-to-text (Vosk)
+	STTEnabled       bool
+	STTModel         string
+	STTMicrophone    string
+	STTHotkey        string
+	STTHotkeyToggle  bool
+	STTDictateToChat bool
 }
 
 var (

@@ -497,7 +497,7 @@ if  wordtime >= 15
 	if logck >= "You are becoming a master of your art."
 		message "*" nameck ": 500-549"
 	end if
-		if logck >= "You are a credit to your craft."
+	if logck >= "You are a credit to your craft."
 		message "*" nameck ": 650-699"
 	end if
 	if logck >= "Your devotion to your craft is exemplary."
@@ -1593,9 +1593,9 @@ setglobal ts4 12
 
 "/sm"
 {
-set logck @env.textlog
 message "loading whatzits..."
 label reload
+set logck @env.textlog
 if cknum < 4
 	// the extra "\" here is required so selectitem command knows to use both words
 	// normaly doesn't excudes anything after first word

@@ -855,8 +855,8 @@ func handleInvCmdOther(cmd int, data []byte) ([]byte, bool) {
 			logError("inventory: cmd %x missing index", cmd)
 			return nil, false
 		}
-		// Server sends 1-based index; convert to 0-based for local arrays.
-		idx = int(data[0]) - 1
+		// Server sends 0-based index; store directly.
+		idx = int(data[0])
 		data = data[1:]
 	}
 	var name string
@@ -883,6 +883,7 @@ func handleInvCmdOther(cmd int, data []byte) ([]byte, bool) {
 	case kInvCmdUnequip:
 		equipInventoryItem(id, idx, false)
 	case kInvCmdName:
+		logDebug("inventory: rename id=%d idx=%d name=%q", id, idx, name)
 		renameInventoryItem(id, idx, name)
 	default:
 		logError("inventory: unknown command %v", cmd)

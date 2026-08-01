@@ -28,6 +28,7 @@ import (
 
 	"gothoom/climg"
 	"gothoom/clsnd"
+	"gothoom/internal/vosk"
 
 	text "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
@@ -98,7 +99,7 @@ var scriptDebugList *eui.ItemData
 // Dirty flags set by script goroutines; consumed by Game.Update on the Ebiten goroutine.
 var scriptsListDirty atomic.Bool
 var scriptDebugDirty atomic.Bool
-var pendingNotification atomic.Value // string
+var pendingNotification atomic.Value     // string
 var pendingNotificationKeys atomic.Value // []int
 
 // Checkboxes in the Windows window so we can update their state live
@@ -1647,6 +1648,7 @@ func makeDownloadsWindow() {
 	startedDownload := false
 	var downloadSoundfontCB *eui.ItemData
 	var downloadTTSCB *eui.ItemData
+	var downloadVoskCB *eui.ItemData
 
 	flow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_VERTICAL}
 
@@ -1756,7 +1758,7 @@ func makeDownloadsWindow() {
 		flow.AddItem(t)
 	}
 
-	if status.NeedSoundfont || status.NeedPiper || status.NeedPiperFem || status.NeedPiperMale {
+	if status.NeedSoundfont || status.NeedPiper || status.NeedPiperFem || status.NeedPiperMale || status.NeedVosk {
 		opt, _ := eui.NewText()
 		opt.Text = "Optional downloads:"
 		opt.FontSize = 15
@@ -1765,7 +1767,7 @@ func makeDownloadsWindow() {
 		flow.AddItem(opt)
 
 		info, _ := eui.NewText()
-		info.Text = "Download TTS voices and the music soundfont."
+		info.Text = "Download TTS voices, the music soundfont, and speech-to-text files."
 		info.FontSize = 13
 		info.Size = eui.Point{X: 320, Y: 25}
 		flow.AddItem(info)
@@ -1795,6 +1797,18 @@ func makeDownloadsWindow() {
 		downloadTTSCB = pc
 		flow.AddItem(pc)
 	}
+	if status.NeedVosk {
+		vc, _ := eui.NewCheckbox()
+		label := "Download Vosk files (speech-to-text)"
+		if status.VoskSize > 0 {
+			label = fmt.Sprintf("Download Vosk files (%s) (speech-to-text)", humanize.Bytes(uint64(status.VoskSize)))
+		}
+		vc.Text = label
+		vc.Size = eui.Point{X: 320, Y: 24}
+		vc.Checked = false
+		downloadVoskCB = vc
+		flow.AddItem(vc)
+	}
 
 	z, _ := eui.NewText()
 	z.Text = ""
@@ -1821,6 +1835,10 @@ func makeDownloadsWindow() {
 		pb.Dirty = true
 		statusText.Dirty = true
 		downloadSoundfont, downloadTTS := optionalDownloadSelections(downloadSoundfontCB, downloadTTSCB)
+		downloadVosk := false
+		if downloadVoskCB != nil {
+			downloadVosk = downloadVoskCB.Checked
+		}
 		// Show the live status + progress and provide a cancel button
 		cancelRow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL}
 		cancelBtn, cancelEvents := eui.NewButton()
@@ -1844,7 +1862,7 @@ func makeDownloadsWindow() {
 			curStatus := status
 			dlMutex.Unlock()
 
-			if err := downloadDataFiles(clVersion, curStatus, downloadSoundfont, downloadTTS, downloadTTS, downloadTTS); err != nil {
+			if err := downloadDataFiles(clVersion, curStatus, downloadSoundfont, downloadTTS, downloadTTS, downloadTTS, downloadVosk); err != nil {
 				logError("download data files: %v", err)
 				// Present inline Retry and Quit buttons
 				flow.Contents = []*eui.ItemData{statusText, pb}
@@ -2849,6 +2867,11 @@ func makeSettingsWindow() {
 	settingsWin.Resizable = false
 	settingsWin.AutoSize = true
 	settingsWin.Movable = true
+	// Cap the height so a tall settings window can't pin its title bar off
+	// screen; content scrolls inside the window instead.
+	if _, sh := eui.ScreenSize(); sh > 0 {
+		settingsWin.MaxHeight = float32(sh) * 0.9
+	}
 
 	// Split settings into three panes: basic (left), appearance (center) and advanced (right)
 	var panelWidth float32 = 270
@@ -3678,6 +3701,327 @@ func makeSettingsWindow() {
 		}
 	}
 	center.AddItem(ttsSpeedSlider)
+
+	voiceDD, voiceEvents := eui.NewDropdown()
+	voiceDD.Label = "TTS Voice"
+	if voices, err := listPiperVoices(); err == nil {
+		voiceDD.Options = voices
+		for i, v := range voices {
+			if v == gs.ChatTTSVoice {
+				voiceDD.Selected = i
+				break
+			}
+		}
+	}
+	voiceDD.Action = func() {
+		if !voiceDD.Open {
+			return
+		}
+		if voices, err := listPiperVoices(); err == nil {
+			voiceDD.Options = voices
+			sel := 0
+			for i, v := range voices {
+				if v == gs.ChatTTSVoice {
+					sel = i
+					break
+				}
+			}
+			voiceDD.Selected = sel
+			if gs.ChatTTSVoice != voices[sel] {
+				SettingsLock.Lock()
+				gs.ChatTTSVoice = voices[sel]
+				SettingsLock.Unlock()
+				settingsDirty.Store(true)
+			}
+		}
+	}
+	voiceDD.Size = eui.Point{X: panelWidth, Y: 24}
+	voiceEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventDropdownSelected {
+			SettingsLock.Lock()
+			gs.ChatTTSVoice = voiceDD.Options[ev.Index]
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			piperModel = ""
+			piperConfig = ""
+			stopAllTTS()
+		}
+	}
+	center.AddItem(voiceDD)
+
+	ttsTestInput, ttsTestEvents := eui.NewInput()
+	ttsTestInput.Text = ttsTestPhrase
+	ttsTestInput.TextPtr = &ttsTestPhrase
+	ttsTestInput.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsTestEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			ttsTestPhrase = ev.Text
+		}
+	}
+	center.AddItem(ttsTestInput)
+
+	ttsTestBtn, ttsTestBtnEvents := eui.NewButton()
+	ttsTestBtn.Text = "Test TTS"
+	ttsTestBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsTestBtnEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			if !gs.ChatTTS {
+				gs.ChatTTS = true
+				settingsDirty.Store(true)
+				if ttsMixCB != nil {
+					ttsMixCB.Checked = true
+				}
+				if ttsMixSlider != nil {
+					ttsMixSlider.Disabled = false
+				}
+				updateSoundVolume()
+			}
+			go playChatTTS(chatTTSCtx, ttsTestPhrase)
+		}
+	}
+	center.AddItem(ttsTestBtn)
+
+	ttsEditBtn, ttsEditEvents := eui.NewButton()
+	ttsEditBtn.Text = "Edit TTS corrections"
+	ttsEditBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsEditEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			open.Run(dataDirPath)
+		}
+	}
+	center.AddItem(ttsEditBtn)
+
+	ttsBlockLabel, _ := eui.NewText()
+	ttsBlockLabel.Text = "Blocked TTS speakers:"
+	ttsBlockLabel.FontSize = 12
+	ttsBlockLabel.Size = eui.Point{X: panelWidth, Y: 20}
+	center.AddItem(ttsBlockLabel)
+
+	ttsBlockText, _ := eui.NewText()
+	ttsBlockText.FontSize = 10
+	ttsBlockText.Size = eui.Point{X: panelWidth, Y: 40}
+	updateTTSBlockText := func() {
+		ttsBlocklistMu.RLock()
+		list := strings.Join(gs.ChatTTSBlocklist, ", ")
+		ttsBlocklistMu.RUnlock()
+		if list == "" {
+			list = "(none)"
+		}
+		ttsBlockText.Text = list
+	}
+	updateTTSBlockText()
+	center.AddItem(ttsBlockText)
+
+	ttsBlockAddRow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL}
+	ttsBlockAddInput, ttsBlockAddEvents := eui.NewInput()
+	ttsBlockAddInput.Size = eui.Point{X: panelWidth - 48, Y: 24}
+	ttsBlockAddEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			_ = ev.Text
+		}
+	}
+	ttsBlockAddRow.AddItem(ttsBlockAddInput)
+	ttsBlockAddBtn, ttsBlockAddBtnEvents := eui.NewButton()
+	ttsBlockAddBtn.Text = "Add"
+	ttsBlockAddBtn.Size = eui.Point{X: 44, Y: 24}
+	ttsBlockAddBtnEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			name := strings.TrimSpace(ttsBlockAddInput.Text)
+			if name != "" {
+				addTTSBlockedName(name)
+				updateTTSBlockText()
+				ttsBlockAddInput.Text = ""
+			}
+		}
+	}
+	ttsBlockAddRow.AddItem(ttsBlockAddBtn)
+	center.AddItem(ttsBlockAddRow)
+
+	ttsGuideBtn, ttsGuideEvents := eui.NewButton()
+	ttsGuideBtn.Text = "Piper Voice Add Guide"
+	ttsGuideBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsGuideEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			makePiperGuideWindow()
+		}
+	}
+	center.AddItem(ttsGuideBtn)
+
+	ttsVoicesBtn, ttsVoicesEvents := eui.NewButton()
+	ttsVoicesBtn.Text = "More Piper voices..."
+	ttsVoicesBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsVoicesEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			open.Run("https://rhasspy.github.io/piper-samples/")
+		}
+	}
+	center.AddItem(ttsVoicesBtn)
+
+	label, _ = eui.NewText()
+	label.Text = "\nSpeech to Text:"
+	label.FontSize = 15
+	label.Size = eui.Point{X: panelWidth, Y: 50}
+	applyBoldFace(label)
+	center.AddItem(label)
+
+	sttEnableCB, sttEnableEvents := eui.NewCheckbox()
+	sttEnableCB.Text = "Enable speech-to-text"
+	sttEnableCB.Checked = gs.STTEnabled
+	sttEnableCB.Size = eui.Point{X: panelWidth, Y: 24}
+	sttEnableEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			gs.STTEnabled = ev.Checked
+			SettingsLock.Unlock()
+			logWarn("stt diag: enable checkbox -> %v", ev.Checked)
+			settingsDirty.Store(true)
+			if !ev.Checked {
+				sttStop()
+				vosk.Close()
+				updateSTTStatus()
+			}
+		}
+	}
+	center.AddItem(sttEnableCB)
+
+	sttMicDD, sttMicEvents := eui.NewDropdown()
+	sttMicDD.Label = "Microphone"
+	sttMicDD.Action = func() {
+		if !sttMicDD.Open {
+			return
+		}
+		sttRefreshMicList(sttMicDD)
+	}
+	sttRefreshMicList(sttMicDD)
+	sttMicDD.Size = eui.Point{X: panelWidth, Y: 24}
+	sttMicEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventDropdownSelected {
+			SettingsLock.Lock()
+			gs.STTMicrophone = sttMicDD.Options[ev.Index]
+			if ev.Index == 0 {
+				gs.STTMicrophone = ""
+			}
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+		}
+	}
+	center.AddItem(sttMicDD)
+
+	sttModelDD, sttModelEvents := eui.NewDropdown()
+	sttModelDD.Label = "Model"
+	sttModelDD.Action = func() {
+		if !sttModelDD.Open {
+			return
+		}
+		sttRefreshModelList(sttModelDD)
+	}
+	sttRefreshModelList(sttModelDD)
+	sttModelDD.Size = eui.Point{X: panelWidth, Y: 24}
+	sttModelEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventDropdownSelected && ev.Index >= 0 && ev.Index < len(sttModelDD.Options) {
+			SettingsLock.Lock()
+			gs.STTModel = sttModelDD.Options[ev.Index]
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			updateSTTStatus()
+		}
+	}
+	center.AddItem(sttModelDD)
+
+	sttModelsBtn, sttModelsEvents := eui.NewButton()
+	sttModelsBtn.Text = "More Vosk models..."
+	sttModelsBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	sttModelsEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			open.Run("https://alphacephei.com/vosk/models")
+		}
+	}
+	center.AddItem(sttModelsBtn)
+
+	sttHotkeyInput, sttHotkeyEvents := eui.NewInput()
+	sttHotkeyInput.Label = "Hotkey (push-to-talk unless toggle checked)"
+	sttHotkeyInput.Text = gs.STTHotkey
+	sttHotkeyInput.TextPtr = &gs.STTHotkey
+	sttHotkeyInput.Size = eui.Point{X: panelWidth, Y: 24}
+	sttHotkeyEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventInputChanged {
+			SettingsLock.Lock()
+			gs.STTHotkey = ev.Text
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			sttRefreshHotkey()
+		}
+	}
+	center.AddItem(sttHotkeyInput)
+
+	sttToggleCB, sttToggleEvents := eui.NewCheckbox()
+	sttToggleCB.Text = "Hotkey toggles (instead of push-to-talk)"
+	sttToggleCB.Checked = gs.STTHotkeyToggle
+	sttToggleCB.Size = eui.Point{X: panelWidth, Y: 24}
+	sttToggleEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			gs.STTHotkeyToggle = ev.Checked
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+		}
+	}
+	center.AddItem(sttToggleCB)
+
+	sttDictateCB, sttDictateEvents := eui.NewCheckbox()
+	sttDictateCB.Text = "Dictate to chat (send what you say)"
+	sttDictateCB.Checked = gs.STTDictateToChat
+	sttDictateCB.Size = eui.Point{X: panelWidth, Y: 24}
+	sttDictateEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			gs.STTDictateToChat = ev.Checked
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+		}
+	}
+	center.AddItem(sttDictateCB)
+
+	sttStatus, _ := eui.NewText()
+	sttStatus.FontSize = 10
+	sttStatus.Size = eui.Point{X: panelWidth, Y: 40}
+	updateSTTStatus = func() {
+		sttStatus.Text = sttStatusText()
+	}
+	updateSTTStatus()
+	center.AddItem(sttStatus)
+
+	sttToggleBtn, sttToggleBtnEvents := eui.NewButton()
+	sttToggleBtn.Text = "Start/Stop listening"
+	sttToggleBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	sttToggleBtnEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			logWarn("stt diag: settings Start/Stop button clicked")
+			sttToggle()
+			updateSTTStatus()
+		}
+	}
+	center.AddItem(sttToggleBtn)
+
+	sttCmdBtn, sttCmdEvents := eui.NewButton()
+	sttCmdBtn.Text = "Edit voice commands"
+	sttCmdBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	sttCmdEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			open.Run(dataDirPath)
+		}
+	}
+	center.AddItem(sttCmdBtn)
+
+	sttTestBtn, sttTestEvents := eui.NewButton()
+	sttTestBtn.Text = "Test speech recognition"
+	sttTestBtn.Size = eui.Point{X: panelWidth, Y: 24}
+	sttTestEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			openSTTTestWindow(sttTestBtn)
+		}
+	}
+	center.AddItem(sttTestBtn)
 
 	outer.AddItem(left)
 	outer.AddItem(center)
@@ -5019,42 +5363,84 @@ func makeAdvancedSettingsWindow() {
 
 	addSectionLabel(interfaceCol, "Cursor")
 
-	cursorNormInput, cursorNormEvents := eui.NewInput()
-	cursorNormInput.Label = "Normal cursor file"
-	cursorNormInput.Text = gs.CursorNormalFile
-	cursorNormInput.TextPtr = &gs.CursorNormalFile
-	cursorNormInput.Size = eui.Point{X: columnWidth, Y: 24}
-	cursorNormInput.SetTooltip("Path to cursor image (.png, .jpg, .ico)")
+	_ = os.MkdirAll(cursorDirPath(), 0o755)
+	cursorDDHeight := float32(24)
+
+	cursorNormDD, cursorNormEvents := eui.NewDropdown()
+	cursorNormDD.Label = "Normal cursor"
+	cursorNormDD.Size = eui.Point{X: columnWidth, Y: cursorDDHeight}
+	cursorNormDD.SetTooltip("Cursor image from the data/cursors folder")
+	cursorNormDD.Action = func() {
+		cursorFiles := listCursorFiles()
+		cursorNormDD.Options = append([]string{"(default)"}, cursorFiles...)
+		cursorNormDD.Selected = 0
+		for i, f := range cursorFiles {
+			if f == gs.CursorNormalFile {
+				cursorNormDD.Selected = i + 1
+				break
+			}
+		}
+	}
+	cursorNormDD.Action()
 	cursorNormEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventInputChanged {
+		if ev.Type == eui.EventDropdownSelected {
 			SettingsLock.Lock()
-			gs.CursorNormalFile = ev.Text
+			if ev.Index == 0 {
+				gs.CursorNormalFile = ""
+			} else {
+				gs.CursorNormalFile = cursorNormDD.Options[ev.Index]
+			}
 			SettingsLock.Unlock()
 			settingsDirty.Store(true)
 			markCursorDirty()
 		}
 	}
-	interfaceCol.AddItem(cursorNormInput)
+	interfaceCol.AddItem(cursorNormDD)
 
-	cursorMoveInput, cursorMoveEvents := eui.NewInput()
-	cursorMoveInput.Label = "Move cursor file"
-	cursorMoveInput.Text = gs.CursorMoveFile
-	cursorMoveInput.TextPtr = &gs.CursorMoveFile
-	cursorMoveInput.Size = eui.Point{X: columnWidth, Y: 24}
-	cursorMoveInput.SetTooltip("Path to cursor image for walk mode (.png, .jpg, .ico)")
+	cursorMoveDD, cursorMoveEvents := eui.NewDropdown()
+	cursorMoveDD.Label = "Move cursor"
+	cursorMoveDD.Size = eui.Point{X: columnWidth, Y: cursorDDHeight}
+	cursorMoveDD.SetTooltip("Cursor image for walk mode from the data/cursors folder")
+	cursorMoveDD.Action = func() {
+		cursorFiles := listCursorFiles()
+		cursorMoveDD.Options = append([]string{"(default)"}, cursorFiles...)
+		cursorMoveDD.Selected = 0
+		for i, f := range cursorFiles {
+			if f == gs.CursorMoveFile {
+				cursorMoveDD.Selected = i + 1
+				break
+			}
+		}
+	}
+	cursorMoveDD.Action()
 	cursorMoveEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventInputChanged {
+		if ev.Type == eui.EventDropdownSelected {
 			SettingsLock.Lock()
-			gs.CursorMoveFile = ev.Text
+			if ev.Index == 0 {
+				gs.CursorMoveFile = ""
+			} else {
+				gs.CursorMoveFile = cursorMoveDD.Options[ev.Index]
+			}
 			SettingsLock.Unlock()
 			settingsDirty.Store(true)
 			markCursorDirty()
 		}
 	}
-	interfaceCol.AddItem(cursorMoveInput)
+	interfaceCol.AddItem(cursorMoveDD)
 
-	// Chat & TTS column
-	addSectionLabel(chatCol, "Chat & TTS")
+	cursorOpenBtn, cursorOpenEvents := eui.NewButton()
+	cursorOpenBtn.Text = "Open cursors folder"
+	cursorOpenBtn.Size = eui.Point{X: columnWidth, Y: 24}
+	cursorOpenEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventClick {
+			_ = os.MkdirAll(cursorDirPath(), 0o755)
+			open.Run(cursorDirPath())
+		}
+	}
+	interfaceCol.AddItem(cursorOpenBtn)
+
+	// Chat column
+	addSectionLabel(chatCol, "Chat")
 
 	tsFormatInput, tsFormatEvents := eui.NewInput()
 	tsFormatInput.Label = "Timestamp format"
@@ -5088,161 +5474,6 @@ func makeAdvancedSettingsWindow() {
 
 	// System column (audio, network, performance)
 	addSectionLabel(chatCol, "Audio")
-
-	voiceDD, voiceEvents := eui.NewDropdown()
-	voiceDD.Label = "TTS Voice"
-	if voices, err := listPiperVoices(); err == nil {
-		voiceDD.Options = voices
-		for i, v := range voices {
-			if v == gs.ChatTTSVoice {
-				voiceDD.Selected = i
-				break
-			}
-		}
-	}
-	voiceDD.Action = func() {
-		if !voiceDD.Open {
-			return
-		}
-		if voices, err := listPiperVoices(); err == nil {
-			voiceDD.Options = voices
-			sel := 0
-			for i, v := range voices {
-				if v == gs.ChatTTSVoice {
-					sel = i
-					break
-				}
-			}
-			voiceDD.Selected = sel
-			if gs.ChatTTSVoice != voices[sel] {
-				SettingsLock.Lock()
-				gs.ChatTTSVoice = voices[sel]
-				SettingsLock.Unlock()
-				settingsDirty.Store(true)
-			}
-		}
-	}
-	voiceDD.Size = eui.Point{X: columnWidth, Y: 24}
-	voiceEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventDropdownSelected {
-			SettingsLock.Lock()
-			gs.ChatTTSVoice = voiceDD.Options[ev.Index]
-			SettingsLock.Unlock()
-			settingsDirty.Store(true)
-			piperModel = ""
-			piperConfig = ""
-			stopAllTTS()
-		}
-	}
-	chatCol.AddItem(voiceDD)
-
-	ttsTestInput, ttsTestEvents := eui.NewInput()
-	ttsTestInput.Text = ttsTestPhrase
-	ttsTestInput.TextPtr = &ttsTestPhrase
-	ttsTestInput.Size = eui.Point{X: columnWidth, Y: 24}
-	ttsTestEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventInputChanged {
-			ttsTestPhrase = ev.Text
-		}
-	}
-	chatCol.AddItem(ttsTestInput)
-
-	ttsTestBtn, ttsTestBtnEvents := eui.NewButton()
-	ttsTestBtn.Text = "Test TTS"
-	ttsTestBtn.Size = eui.Point{X: columnWidth, Y: 24}
-	ttsTestBtnEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
-			if !gs.ChatTTS {
-				gs.ChatTTS = true
-				settingsDirty.Store(true)
-				if ttsMixCB != nil {
-					ttsMixCB.Checked = true
-				}
-				if ttsMixSlider != nil {
-					ttsMixSlider.Disabled = false
-				}
-				updateSoundVolume()
-			}
-			go playChatTTS(chatTTSCtx, ttsTestPhrase)
-		}
-	}
-	chatCol.AddItem(ttsTestBtn)
-
-	ttsEditBtn, ttsEditEvents := eui.NewButton()
-	ttsEditBtn.Text = "Edit TTS corrections"
-	ttsEditBtn.Size = eui.Point{X: columnWidth, Y: 24}
-	ttsEditEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
-			open.Run(dataDirPath)
-		}
-	}
-	chatCol.AddItem(ttsEditBtn)
-
-	ttsBlockLabel, _ := eui.NewText()
-	ttsBlockLabel.Text = "Blocked TTS speakers:"
-	ttsBlockLabel.FontSize = 12
-	ttsBlockLabel.Size = eui.Point{X: columnWidth, Y: 20}
-	chatCol.AddItem(ttsBlockLabel)
-
-	ttsBlockText, _ := eui.NewText()
-	ttsBlockText.FontSize = 10
-	ttsBlockText.Size = eui.Point{X: columnWidth, Y: 40}
-	updateTTSBlockText := func() {
-		ttsBlocklistMu.RLock()
-		list := strings.Join(gs.ChatTTSBlocklist, ", ")
-		ttsBlocklistMu.RUnlock()
-		if list == "" {
-			list = "(none)"
-		}
-		ttsBlockText.Text = list
-	}
-	updateTTSBlockText()
-	chatCol.AddItem(ttsBlockText)
-
-	ttsBlockAddRow := &eui.ItemData{ItemType: eui.ITEM_FLOW, FlowType: eui.FLOW_HORIZONTAL}
-	ttsBlockAddInput, ttsBlockAddEvents := eui.NewInput()
-	ttsBlockAddInput.Size = eui.Point{X: columnWidth - 48, Y: 24}
-	ttsBlockAddEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventInputChanged {
-			_ = ev.Text
-		}
-	}
-	ttsBlockAddRow.AddItem(ttsBlockAddInput)
-	ttsBlockAddBtn, ttsBlockAddBtnEvents := eui.NewButton()
-	ttsBlockAddBtn.Text = "Add"
-	ttsBlockAddBtn.Size = eui.Point{X: 44, Y: 24}
-	ttsBlockAddBtnEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
-			name := strings.TrimSpace(ttsBlockAddInput.Text)
-			if name != "" {
-				addTTSBlockedName(name)
-				updateTTSBlockText()
-				ttsBlockAddInput.Text = ""
-			}
-		}
-	}
-	ttsBlockAddRow.AddItem(ttsBlockAddBtn)
-	chatCol.AddItem(ttsBlockAddRow)
-
-	ttsGuideBtn, ttsGuideEvents := eui.NewButton()
-	ttsGuideBtn.Text = "Piper Voice Add Guide"
-	ttsGuideBtn.Size = eui.Point{X: columnWidth, Y: 24}
-	ttsGuideEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
-			makePiperGuideWindow()
-		}
-	}
-	chatCol.AddItem(ttsGuideBtn)
-
-	ttsVoicesBtn, ttsVoicesEvents := eui.NewButton()
-	ttsVoicesBtn.Text = "More Piper voices..."
-	ttsVoicesBtn.Size = eui.Point{X: columnWidth, Y: 24}
-	ttsVoicesEvents.Handle = func(ev eui.UIEvent) {
-		if ev.Type == eui.EventClick {
-			open.Run("https://rhasspy.github.io/piper-samples/")
-		}
-	}
-	chatCol.AddItem(ttsVoicesBtn)
 
 	throttleCB, throttleEvents := eui.NewCheckbox()
 	throttleSoundCB = throttleCB

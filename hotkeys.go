@@ -1063,40 +1063,7 @@ func checkHotkeys() {
 						go fn(ev)
 					}
 				}
-				for _, c := range hk.Commands {
-					cmd := strings.TrimSpace(c.Command)
-					lower := strings.ToLower(cmd)
-					if lower == "/fullscreen" {
-						SettingsLock.Lock()
-						gs.Fullscreen = !gs.Fullscreen
-						ebiten.SetFullscreen(gs.Fullscreen)
-						ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
-						SettingsLock.Unlock()
-						settingsDirty.Store(true)
-						continue
-					}
-					// Show hotkey-triggered command as if it were typed
-					var ok bool
-					cmd, ok = applyHotkeyVars(cmd)
-					if !ok {
-						return
-					}
-					if strings.HasPrefix(strings.ToLower(cmd), "/equip") {
-						if hotkeyEquipAlreadyEquipped(cmd) {
-							continue
-						}
-					}
-					if cmd != "" {
-						if gs.scriptOutputDebug {
-							consoleMessage("> " + cmd)
-						}
-					}
-					if c.Pause > 0 {
-						enqueueCommandWithPause(cmd, c.Pause)
-					} else {
-						enqueueCommand(cmd)
-					}
-				}
+				runHotkeyCommands(hk)
 				nextCommand()
 				break
 			}
@@ -1114,6 +1081,67 @@ func shouldBlockComboWhenAlwaysOpen(parts []string) bool {
 	}
 	trig := strings.ToLower(parts[len(parts)-1])
 	return isTypingTrigger(trig)
+}
+
+// runHotkeyCommands enqueues every command of a hotkey, resolving hotkey
+// variables first. Shared by normal hotkey input and voice-triggered hotkeys.
+func runHotkeyCommands(hk Hotkey) {
+	for _, c := range hk.Commands {
+		cmd := strings.TrimSpace(c.Command)
+		lower := strings.ToLower(cmd)
+		if lower == "/fullscreen" {
+			SettingsLock.Lock()
+			gs.Fullscreen = !gs.Fullscreen
+			ebiten.SetFullscreen(gs.Fullscreen)
+			ebiten.SetWindowFloating(gs.Fullscreen || gs.AlwaysOnTop)
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+			continue
+		}
+		// Show hotkey-triggered command as if it were typed
+		var ok bool
+		cmd, ok = applyHotkeyVars(cmd)
+		if !ok {
+			return
+		}
+		if strings.HasPrefix(strings.ToLower(cmd), "/equip") {
+			if hotkeyEquipAlreadyEquipped(cmd) {
+				continue
+			}
+		}
+		if cmd != "" {
+			if gs.scriptOutputDebug {
+				consoleMessage("> " + cmd)
+			}
+		}
+		if c.Pause > 0 {
+			enqueueCommandWithPause(cmd, c.Pause)
+		} else {
+			enqueueCommand(cmd)
+		}
+	}
+}
+
+// runHotkeyByCombo finds an enabled hotkey matching combo and runs its
+// commands. Returns false when no matching hotkey exists.
+func runHotkeyByCombo(combo string) bool {
+	if combo == "" {
+		return false
+	}
+	hotkeysMu.RLock()
+	list := append([]Hotkey(nil), hotkeys...)
+	hotkeysMu.RUnlock()
+	for _, hk := range list {
+		if hk.Disabled || hk.ConflictDisabled {
+			continue
+		}
+		if hk.Combo == combo || strings.EqualFold(hk.Combo, combo) || sameCombo(hk.Combo, combo) {
+			runHotkeyCommands(hk)
+			nextCommand()
+			return true
+		}
+	}
+	return false
 }
 
 func comboHasModifier(parts []string) bool {

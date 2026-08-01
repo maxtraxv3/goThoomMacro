@@ -5,13 +5,17 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	_ "golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
 )
 
@@ -133,6 +137,8 @@ func reloadCustomCursors() {
 	customCursorMu.Lock()
 	defer customCursorMu.Unlock()
 
+	_ = os.MkdirAll(cursorDirPath(), 0o755)
+
 	if customCursorNorm != nil {
 		customCursorNorm.Deallocate()
 		customCursorNorm = nil
@@ -142,16 +148,12 @@ func reloadCustomCursors() {
 		customCursorMove = nil
 	}
 
-	normalPath := gs.CursorNormalFile
-	movePath := gs.CursorMoveFile
+	normalPath := resolveCursorPath(gs.CursorNormalFile)
+	movePath := resolveCursorPath(gs.CursorMoveFile)
 
 	useCustomCursors = false
 
 	if normalPath != "" {
-		abs, err := filepath.Abs(normalPath)
-		if err == nil {
-			normalPath = abs
-		}
 		ext := strings.ToLower(filepath.Ext(normalPath))
 		if ext == ".ico" {
 			customCursorNorm = loadICO(normalPath)
@@ -166,10 +168,6 @@ func reloadCustomCursors() {
 	}
 
 	if movePath != "" {
-		abs, err := filepath.Abs(movePath)
-		if err == nil {
-			movePath = abs
-		}
 		ext := strings.ToLower(filepath.Ext(movePath))
 		if ext == ".ico" {
 			customCursorMove = loadICO(movePath)
@@ -196,6 +194,51 @@ func reloadCustomCursors() {
 
 func markCursorDirty() {
 	cursorDirty = true
+}
+
+// cursorImageExts lists image extensions shown in the cursor dropdown.
+var cursorImageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico"}
+
+// cursorDirPath returns the folder that holds selectable cursor images.
+func cursorDirPath() string {
+	return filepath.Join(dataDirPath, "cursors")
+}
+
+// listCursorFiles returns the names of image files in the cursors folder,
+// sorted alphabetically.
+func listCursorFiles() []string {
+	entries, err := os.ReadDir(cursorDirPath())
+	if err != nil {
+		return nil
+	}
+	files := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		for _, c := range cursorImageExts {
+			if ext == c {
+				files = append(files, e.Name())
+				break
+			}
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
+// resolveCursorPath converts a saved cursor setting into a file path. A bare
+// filename is resolved inside the cursors folder; existing absolute or
+// relative paths are kept for backward compatibility.
+func resolveCursorPath(name string) string {
+	if name == "" {
+		return ""
+	}
+	if filepath.IsAbs(name) || strings.ContainsRune(name, filepath.Separator) {
+		return name
+	}
+	return filepath.Join(cursorDirPath(), name)
 }
 
 func updateCustomCursors() {

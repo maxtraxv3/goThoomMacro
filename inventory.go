@@ -65,6 +65,7 @@ func resetInventory() {
 // inventory items and rebuilds the inventoryNames map based on the current
 // state. inventoryMu must be held by the caller.
 func rebuildInventoryIndices() {
+	oldNames := inventoryNames
 	inventoryNames = make(map[inventoryKey]string)
 	for i := range inventoryItems {
 		inventoryItems[i].Index = i
@@ -75,6 +76,15 @@ func rebuildInventoryIndices() {
 				key.IDIndex = -1
 			}
 			inventoryNames[key] = inventoryItems[i].Extra
+		}
+	}
+	// Carry over any pending template renames not yet consumed by
+	// addInventoryItem so they survive until the target item arrives.
+	for k, v := range oldNames {
+		if k.IDIndex >= 0 {
+			if _, exists := inventoryNames[k]; !exists {
+				inventoryNames[k] = v
+			}
 		}
 	}
 }
@@ -89,9 +99,32 @@ func addInventoryItem(id uint16, idx int, name string, equip bool) {
 				inventoryItems[i].IDIndex++
 			}
 		}
-		// Append as a distinct instance; keep display order by placing at end
-		disp := fmt.Sprintf("%s <#%d>", name, idx+1)
-		item := InventoryItem{ID: id, Name: disp, Base: name, Extra: "", Equipped: equip, Index: len(inventoryItems), IDIndex: idx, Quantity: 1}
+		// The name from the packet is the custom name (e.g. creature info).
+		// The base name comes from CL_Images by ID.
+		extra := name
+		if custom, ok := inventoryNames[inventoryKey{ID: id, IDIndex: int16(idx)}]; ok && custom != "" {
+			extra = custom
+		}
+		base := ""
+		if clImages != nil {
+			if n := clImages.ItemName(uint32(id)); n != "" {
+				base = n
+			}
+		}
+		if base == "" {
+			if n, ok := defaultInventoryNames[id]; ok {
+				base = n
+			} else {
+				base = fmt.Sprintf("Item %d", id)
+			}
+		}
+		disp := base
+		if extra != "" {
+			disp = fmt.Sprintf("%s <#%d %s>", base, idx+1, extra)
+		} else {
+			disp = fmt.Sprintf("%s <#%d>", base, idx+1)
+		}
+		item := InventoryItem{ID: id, Name: disp, Base: base, Extra: extra, Equipped: equip, Index: len(inventoryItems), IDIndex: idx, Quantity: 1}
 		inventoryItems = append(inventoryItems, item)
 	} else {
 		// Legacy/non-template: coalesce by ID only when normalized names match.
@@ -118,10 +151,11 @@ func addInventoryItem(id uint16, idx int, name string, equip bool) {
 	if equip && clImages != nil {
 		slot := clImages.ItemSlot(uint32(id))
 		for i := range inventoryItems {
-			if inventoryItems[i].Equipped && (inventoryItems[i].ID != id || i != idx) {
-				if clImages.ItemSlot(uint32(inventoryItems[i].ID)) == slot {
-					inventoryItems[i].Equipped = false
-				}
+			if inventoryItems[i].ID == id && inventoryItems[i].IDIndex == idx {
+				continue
+			}
+			if inventoryItems[i].Equipped && clImages.ItemSlot(uint32(inventoryItems[i].ID)) == slot {
+				inventoryItems[i].Equipped = false
 			}
 		}
 	}
@@ -277,6 +311,11 @@ func renameInventoryItem(id uint16, idx int, name string) {
 		// Template items are addressed by a per-ID index. Update only the
 		// matching instance so multiple containers of the same type can
 		// retain distinct names.
+		// Always persist the name so addInventoryItem can pick it up if the
+		// item does not exist yet (rename arriving before the add command).
+		if name != "" {
+			inventoryNames[inventoryKey{ID: id, IDIndex: int16(idx)}] = name
+		}
 		for i := range inventoryItems {
 			if inventoryItems[i].ID == id && inventoryItems[i].IDIndex == idx {
 				// Determine base (official) name without any suffix
@@ -293,11 +332,9 @@ func renameInventoryItem(id uint16, idx int, name string) {
 					base = fmt.Sprintf("Item %d", id)
 				}
 				if name != "" {
-					// Canonical: include colon for custom template names
-					inventoryItems[i].Name = fmt.Sprintf("%s <#%d: %s>", base, idx+1, name)
+					inventoryItems[i].Name = fmt.Sprintf("%s <#%d %s>", base, idx+1, name)
 					inventoryItems[i].Base = base
 					inventoryItems[i].Extra = name
-					inventoryNames[inventoryKey{ID: id, IDIndex: int16(idx)}] = name
 				} else {
 					inventoryItems[i].Name = fmt.Sprintf("%s <#%d>", base, idx+1)
 					inventoryItems[i].Base = base
@@ -431,7 +468,7 @@ func setFullInventory(ids []uint16, equipped []bool) {
 		disp := base
 		if isTemplate {
 			if strings.TrimSpace(name) != "" {
-				disp = fmt.Sprintf("%s <#%d: %s>", base, idx+1, name)
+				disp = fmt.Sprintf("%s <#%d %s>", base, idx+1, name)
 			} else {
 				disp = fmt.Sprintf("%s <#%d>", base, idx+1)
 			}

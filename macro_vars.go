@@ -249,39 +249,36 @@ func macroSetGlobalVariable(name, value string) {
 	if newName, ok := obsoleteVarRemap[name]; ok {
 		name = newName
 	}
-	// Resolve the value (handle variable references and quotes)
-	resolved := macroResolveExpr(value)
 	name = macroResolveBrackets(name)
 	// Find or create
 	for m := macroState.GlobalVars; m != nil; m = m.Next {
 		if m.VarName == name {
-			m.VarValue = resolved
+			m.VarValue = value
 			return
 		}
 	}
 	macroState.GlobalVars = &Macro{
 		Kind:       macroVariable,
 		VarName:    name,
-		VarValue:   resolved,
+		VarValue:   value,
 		Next:       macroState.GlobalVars,
 	}
 }
 
 // macroSetLocalVariable sets a variable in the executing macro's local scope.
 func macroSetLocalVariable(ex *ExecutingMacro, name, value string) {
-	resolved := macroResolveExpr(value)
 	name = macroResolveBrackets(name)
 	// Find or create in local vars
 	for m := ex.Vars; m != nil; m = m.Next {
 		if m.VarName == name {
-			m.VarValue = resolved
+			m.VarValue = value
 			return
 		}
 	}
 	ex.Vars = &Macro{
 		Kind:     macroVariable,
 		VarName:  name,
-		VarValue: resolved,
+		VarValue: value,
 		Next:     ex.Vars,
 	}
 }
@@ -325,6 +322,8 @@ func macroProcessEscapes(s string) string {
 				i++
 			default:
 				b.WriteByte('\\')
+				b.WriteByte(s[i+1])
+				i++
 			}
 		} else {
 			b.WriteByte(s[i])
@@ -360,10 +359,34 @@ func macroResolveExpression(ex *ExecutingMacro, expr string) string {
 		if val, ok := macroResolveVariable(s); ok {
 			return val
 		}
+		// Try resolving with variable-based .word[N]/.letter[N]/.num_words/.num_letters index
+		if val, ok := macroResolveVarSuffix(ex, s); ok {
+			return val
+		}
 		return s
 	}
 
 	// Bare variable name (no @, no quotes) — look up as user variable
+
+	// Handle .word[N], .letter[N], .num_words, .num_letters suffixes on bare vars
+	if val, ok := macroResolveVarSuffix(ex, s); ok {
+		return val
+	}
+
+	// Handle bracket-indexed variable references on the RHS (e.g., dataset[cknum], msg[nummsger])
+	if idx := strings.IndexByte(s, '['); idx > 0 && strings.HasSuffix(s, "]") {
+		base := s[:idx]
+		inner := s[idx+1 : len(s)-1]
+		resolved := macroResolveExpression(ex, inner)
+		fullName := base + "[" + resolved + "]"
+		if val, ok := macroGetLocalVariable(ex, fullName); ok {
+			return val
+		}
+		if val, ok := macroFindGlobalVariable(fullName); ok {
+			return val
+		}
+	}
+
 	if val, ok := macroGetLocalVariable(ex, s); ok {
 		return val
 	}
@@ -372,6 +395,106 @@ func macroResolveExpression(ex *ExecutingMacro, expr string) string {
 	}
 
 	return s
+}
+
+// macroResolveBaseVar resolves a base variable name for suffix operations,
+// trying local, global, and built-in namespace variables.
+func macroResolveBaseVar(ex *ExecutingMacro, name string) (string, bool) {
+	val, ok := macroGetLocalVariable(ex, name)
+	if ok {
+		return val, true
+	}
+	val, ok = macroFindGlobalVariable(name)
+	if ok {
+		return val, true
+	}
+	if strings.HasPrefix(name, "@") {
+		val, ok = macroResolveVariable(name)
+		if ok {
+			return val, true
+		}
+	}
+	return "", false
+}
+
+// macroResolveVarSuffix handles .word[N], .letter[N], .num_words, .num_letters
+// suffixes on variable names. Supports both literal and variable-based indices
+// (e.g., @my.selected_item.word[lastwordinselec]).
+func macroResolveVarSuffix(ex *ExecutingMacro, name string) (string, bool) {
+	s := name
+
+	// .num_words suffix
+	if strings.HasSuffix(s, ".num_words") {
+		base := s[:len(s)-len(".num_words")]
+		val, ok := macroResolveBaseVar(ex, base)
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprintf("%d", len(strings.Fields(val))), true
+	}
+
+	// .num_letters suffix
+	if strings.HasSuffix(s, ".num_letters") {
+		base := s[:len(s)-len(".num_letters")]
+		val, ok := macroResolveBaseVar(ex, base)
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprintf("%d", len([]rune(val))), true
+	}
+
+	// .word[N] or .letter[N] suffix — find the rightmost one for chained suffixes
+	wordIdx := strings.LastIndex(s, ".word[")
+	letterIdx := strings.LastIndex(s, ".letter[")
+	hasClose := strings.HasSuffix(s, "]")
+
+	if wordIdx >= 0 && hasClose && (letterIdx < 0 || wordIdx > letterIdx) {
+		// .word[N] is the rightmost suffix
+		nStr := s[wordIdx+6 : len(s)-1]
+		n, err := strconv.Atoi(nStr)
+		if err != nil {
+			resolved := macroResolveExpression(ex, nStr)
+			n, err = strconv.Atoi(resolved)
+		}
+		if err != nil || n < 0 {
+			return "", false
+		}
+		base := s[:wordIdx]
+		val, ok := macroResolveBaseVar(ex, base)
+		if !ok {
+			return "", false
+		}
+		words := strings.Fields(val)
+		if n < len(words) {
+			return words[n], true
+		}
+		return "", false
+	}
+
+	if letterIdx >= 0 && hasClose && (wordIdx < 0 || letterIdx > wordIdx) {
+		// .letter[N] is the rightmost suffix
+		nStr := s[letterIdx+8 : len(s)-1]
+		n, err := strconv.Atoi(nStr)
+		if err != nil {
+			resolved := macroResolveExpression(ex, nStr)
+			n, err = strconv.Atoi(resolved)
+		}
+		if err != nil || n < 0 {
+			return "", false
+		}
+		base := s[:letterIdx]
+		val, ok := macroResolveBaseVar(ex, base)
+		if !ok {
+			return "", false
+		}
+		runes := []rune(val)
+		if n < len(runes) {
+			return string(runes[n]), true
+		}
+		return "", false
+	}
+
+	return "", false
 }
 
 // macroResolveTextOp handles @text.word[N], @text.letter[N], @text.num_words, @text.num_letters.
@@ -471,11 +594,12 @@ func macroGetEquipmentSlotVar(varID int) string {
 	return macroGetEquippedItemName(slot)
 }
 
-// macroGetSelectedItemName returns the name of the currently selected item.
+// macroGetSelectedItemName returns the name of the currently selected item
+// (the item most recently selected via /selectitem or inventory click).
 func macroGetSelectedItemName() string {
 	items := getInventory()
 	for _, it := range items {
-		if it.Equipped {
+		if it.ID == selectedInvID && it.IDIndex == selectedInvIdx {
 			return it.Name
 		}
 	}

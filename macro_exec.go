@@ -71,11 +71,22 @@ func macroContinueOne(ex *ExecutingMacro) bool {
 			return true
 		}
 
-		// Check for buffer with \r (time to send a command)
-		if strings.Contains(ex.Buffer, "\r") {
-			cmd := strings.ReplaceAll(ex.Buffer, "\r", "")
-			if cmd != "" {
-				enqueueCommand(cmd)
+		// Check for buffer with \r (macros use literal \r or actual CR as command terminator)
+		if strings.Contains(ex.Buffer, "\r") || strings.Contains(ex.Buffer, "\\r") {
+			cmdStr := strings.ReplaceAll(ex.Buffer, "\r", "")
+			cmdStr = strings.ReplaceAll(cmdStr, "\\r", "")
+			if cmdStr != "" {
+				// Handle client-side commands synchronously
+				lower := strings.ToLower(cmdStr)
+				if strings.HasPrefix(lower, "/selectitem") {
+					arg := strings.TrimSpace(cmdStr[len("/selectitem"):])
+					handleSelectItem(arg)
+				} else if strings.HasPrefix(lower, "/select") {
+					arg := strings.TrimSpace(cmdStr[len("/select"):])
+					handleSelect(arg)
+				} else {
+					enqueueCommand(cmdStr)
+				}
 			}
 			ex.Buffer = ""
 			return false
@@ -241,7 +252,12 @@ func macroExecuteSetVar(ex *ExecutingMacro, cmd *Macro, global bool) bool {
 		op := cmd.Params[1].VarName
 		valStr := macroResolveExpression(ex, cmd.Params[2].VarName)
 
-		curVal, _ := macroGetLocalVariable(ex, name)
+		var curVal string
+		if global {
+			curVal, _ = macroFindGlobalVariable(name)
+		} else {
+			curVal, _ = macroGetLocalVariable(ex, name)
+		}
 		if curVal == "" {
 			curVal = "0"
 		}
@@ -548,6 +564,7 @@ func macroFinish(ex *ExecutingMacro) {
 	// Send any remaining buffer content
 	if ex.Buffer != "" {
 		cmd := strings.ReplaceAll(ex.Buffer, "\r", "")
+		cmd = strings.ReplaceAll(cmd, "\\r", "")
 		if cmd != "" {
 			enqueueCommand(cmd)
 		}

@@ -187,7 +187,7 @@ func (p *macroParser) newMacro(line string) {
 		isGlobal := lword == "setglobal"
 		vname, rest2 := getWord(rest)
 		vval, _ := getWord(rest2)
-		macroSetVariable(vname, vval, isGlobal)
+		macroSetVariable(vname, macroResolveExpr(vval), isGlobal)
 		return
 	}
 

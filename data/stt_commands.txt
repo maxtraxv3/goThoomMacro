@@ -1,0 +1,40 @@
+# Voice commands for speech-to-text (Vosk).
+#
+# Format: phrase=command
+# The phrase must be the first thing you say (the start of the utterance).
+# The longest matching phrase wins, so "think to clan" beats "think to".
+#
+# Special values in the command:
+#   {text}  replaced with everything you said AFTER the phrase
+#           e.g. "yell=\YELL {text}" + saying "yell help" sends "\YELL help"
+#   @name   runs a client-side macro function (e.g. "@sit")
+#   @hotkey COMBO   triggers a hotkey by its combo (e.g. "@hotkey ctrl-f1")
+#   /name   runs a built-in or script-registered client command
+#           (otherwise anything else is sent to the game server as chat)
+#
+# Examples:
+#   status=\STATUS
+#   sit down=@sit                   # run a macro function
+#   do macro=@funcname
+#   run script=/mycript arg
+#   my hotkey=@hotkey ctrl-f1
+
+
+say={text}                      # "say hello all" -> sends "hello all"
+yell=\YELL {text}               # "yell help" -> "\YELL help"
+action=\ACTION {text}
+narrate=\NARRATE {text}
+think=\THINK {text}
+think to clan=\THINKCLAN {text} # clan private message
+think to=\THINKTO {text}        # private message: "think to bob hi"
+pose=\POSE {text}
+whisper=\WHISPER {text}      # nearby chat: "whisper to bob hi"
+equip=\EQUIP {text}             # "equip a sword" -> "\EQUIP a sword"
+unequip=\UNEQUIP {text}
+
+# Vosk sometimes mishears "pose" - these aliases map common mishearings to the same command.
+poe's=\POSE {text}
+poes=\POSE {text}
+poses=\POSE {text}
+posts=\POSE {text}
+poos=\POSE {text}

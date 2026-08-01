@@ -19,6 +19,7 @@ import (
 
 	"gothoom/climg"
 	"gothoom/clsnd"
+	"gothoom/internal/vosk"
 )
 
 const defaultUpdateBase = "https://www.deltatao.com/downloads/clanlord"
@@ -489,11 +490,13 @@ type dataFilesStatus struct {
 	NeedPiper     bool
 	NeedPiperFem  bool
 	NeedPiperMale bool
+	NeedVosk      bool
 	Files         []fileInfo
 	SoundfontSize int64
 	PiperSize     int64
 	PiperFemSize  int64
 	PiperMaleSize int64
+	VoskSize      int64
 	Version       int
 	ImageVersion  int
 	SoundVersion  int
@@ -657,13 +660,18 @@ func checkDataFiles(clientVer int) (dataFilesStatus, error) {
 		}
 	}
 
+	if !vosk.Available(sttLibPaths()) || !vosk.ModelReady(sttModelDir()) {
+		status.NeedVosk = true
+		status.VoskSize = headSize(voskModelURL(gs.STTModel))
+	}
+
 	return status, nil
 }
 
-func downloadDataFiles(clientVer int, status dataFilesStatus, getSoundfont, getPiper, getFem, getMale bool) error {
+func downloadDataFiles(clientVer int, status dataFilesStatus, getSoundfont, getPiper, getFem, getMale, getVosk bool) error {
 	if isWASM {
 		// Restrict downloads to CL_Images/CL_Sounds only in WASM.
-		getSoundfont, getPiper, getFem, getMale = false, false, false, false
+		getSoundfont, getPiper, getFem, getMale, getVosk = false, false, false, false, false
 	} else {
 		if err := os.MkdirAll(dataDirPath, 0755); err != nil {
 			logError("create %v: %v", dataDirPath, err)
@@ -844,6 +852,9 @@ func downloadDataFiles(clientVer int, status dataFilesStatus, getSoundfont, getP
 		} else {
 			logError("prepare piper: %v", err)
 		}
+	}
+	if err := downloadVoskFiles(getVosk); err != nil {
+		return err
 	}
 	return nil
 }

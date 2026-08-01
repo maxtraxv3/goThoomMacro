@@ -34,6 +34,7 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/f1monkey/bitmap v1.4.0 // indirect
+	github.com/gen2brain/malgo v0.11.25 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect

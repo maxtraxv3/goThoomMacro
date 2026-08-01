@@ -632,6 +632,7 @@ func (g *Game) Update() error {
 	eui.Update() //We really need this to return eaten clicks
 	// Advance script tick waiters once per frame
 	scriptAdvanceTick()
+	updateSTT()
 	typingElsewhere := typingInUI()
 	if inputActive && inputFlow != nil && len(inputFlow.Contents) > 0 {
 		item := inputFlow.Contents[0]
@@ -952,35 +953,7 @@ func (g *Game) Update() error {
 					}()
 				} else {
 					// Try built-in or script-registered commands first
-					if strings.HasPrefix(txt, "/") {
-						lower := strings.ToLower(txt)
-						if strings.HasPrefix(lower, "/testhooks") {
-							consoleMessage("> " + txt)
-							arg := strings.TrimSpace(txt[len("/testhooks"):])
-							testScriptHooks(arg)
-						} else {
-							parts := strings.SplitN(strings.TrimPrefix(txt, "/"), " ", 2)
-							name := strings.ToLower(parts[0])
-							args := ""
-							if len(parts) > 1 {
-								args = parts[1]
-							}
-							if handler, ok := scriptCommands[name]; ok && handler != nil {
-								owner := scriptCommandOwners[name]
-								if !scriptDisabled[owner] {
-									consoleMessage("> " + txt)
-									scriptLogEvent(owner, "Command", args)
-									go handler(args)
-								} else {
-									// Disabled script commands should fall through so the
-									// server still receives the user's input.
-									pendingCommand = txt
-								}
-							} else {
-								pendingCommand = txt
-							}
-						}
-					} else {
+					if !handleClientCommand(txt) {
 						pendingCommand = txt
 					}
 					// consoleMessage("> " + txt)
@@ -1554,6 +1527,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			drawScriptOverlays(worldView, finalScale)
 			// Recording/Playback badge in top-left of world view
 			drawRecPlayBadge(worldView)
+			// Mic listening indicator below the rec badge
+			drawMicListeningBadge(worldView)
 		}
 		gs.GameScale = prev
 	}
@@ -1623,6 +1598,31 @@ func drawRecPlayBadge(dst *ebiten.Image) {
 	op.GeoM.Translate(float64(2*pad+r*2), float64(4+pad))
 	op.ColorScale.Scale(1, 1, 1, float32(alpha))
 	text.Draw(dst, label, mainFontBold, op)
+	releaseTextDrawOpts(op)
+}
+
+// drawMicListeningBadge shows a pulsing indicator below the rec badge while
+// the speech-to-text mic is listening.
+func drawMicListeningBadge(dst *ebiten.Image) {
+	if !sttStarted {
+		return
+	}
+	// Pulse alpha between ~0.5 and 1.0
+	t := float64(time.Now().UnixNano()) / 1e9
+	s := 0.5 + 0.5*math.Sin(t*2*math.Pi/1.2)
+	alpha := 0.6 + 0.4*s
+	col := color.RGBA{R: 80, G: 200, B: 255, A: uint8(alpha * 255)}
+	// Positioned below the rec badge, near top-left
+	pad := float32(6)
+	cx := float32(10)
+	cy := float32(36)
+	r := float32(6)
+	vector.FillCircle(dst, cx+pad, cy+pad, r, col, false)
+	// Text to the right
+	op := acquireTextDrawOpts()
+	op.GeoM.Translate(float64(2*pad+r*2), float64(4+pad+26))
+	op.ColorScale.Scale(1, 1, 1, float32(alpha))
+	text.Draw(dst, "MIC", mainFontBold, op)
 	releaseTextDrawOpts(op)
 }
 
