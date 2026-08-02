@@ -35,7 +35,6 @@ func consoleMessage(msg string) {
 	}
 	consoleLog.Add(msg)
 	appendConsoleLog(msg)
-	macroState.TextLogBuffer = msg
 
 	// Defer UI update to Game.Update on the Ebiten goroutine to avoid
 	// a data race between the network goroutine and the draw goroutine
@@ -43,6 +42,24 @@ func consoleMessage(msg string) {
 	consoleDirty.Store(true)
 
 	runConsoleTriggers(msg)
+}
+
+// updateTextLog mirrors a server line into @env.textlog. Like the classic
+// client, the line carries the ClanLord timestamp prefix when timestamps are
+// enabled for its channel. Local feedback must never go through here.
+func updateTextLog(msg string, stamped bool) {
+	if stamped {
+		macroState.TextLogBuffer = macroTextLogStamp() + msg
+	} else {
+		macroState.TextLogBuffer = msg
+	}
+}
+
+// serverConsoleText routes a server-sourced console line to the console and
+// @env.textlog. Non-server feedback should call consoleMessage directly.
+func serverConsoleText(msg string) {
+	updateTextLog(msg, gs.ConsoleTimestamps)
+	consoleMessage(msg)
 }
 
 func getConsoleMessages() []string {

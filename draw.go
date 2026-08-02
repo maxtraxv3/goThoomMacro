@@ -1775,7 +1775,7 @@ func parseDrawState(data []byte, buildCache bool) (int32, int32, error) {
 				}
 				chatMessage(msg)
 			} else {
-				consoleMessage(msg)
+				serverConsoleText(msg)
 			}
 		}
 		stateData = stateData[p+end+1:]

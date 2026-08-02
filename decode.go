@@ -427,7 +427,7 @@ func handleInfoText(data []byte) {
 		}
 		if line[0] == 0xC2 {
 			if txt := decodeBEPP(line); txt != "" {
-				consoleMessage(txt)
+				serverConsoleText(txt)
 			}
 			continue
 		}
@@ -438,7 +438,7 @@ func handleInfoText(data []byte) {
 				}
 				chatMessage(txt)
 			} else {
-				consoleMessage(txt)
+				serverConsoleText(txt)
 			}
 			continue
 		}
@@ -465,6 +465,6 @@ func handleInfoText(data []byte) {
 		if strings.HasPrefix(s, "/") {
 			continue
 		}
-		consoleMessage(s)
+		serverConsoleText(s)
 	}
 }

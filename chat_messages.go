@@ -47,7 +47,7 @@ func chatMessage(msg string) {
 
 	chatLog.Add(msg)
 	appendChatLog(msg)
-	macroState.TextLogBuffer = msg
+	updateTextLog(msg, gs.ChatTimestamps)
 
 	// Defer UI update to Game.Update on the Ebiten goroutine.
 	chatDirty.Store(true)

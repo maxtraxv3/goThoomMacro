@@ -315,7 +315,7 @@ func processServerMessage(msg []byte) {
 		return
 	}
 	if txt := decodeMessage(msg); txt != "" {
-		consoleMessage(txt)
+		serverConsoleText(txt)
 	} else {
 		logDebug("msg tag %d len %d", tag, len(msg))
 	}
