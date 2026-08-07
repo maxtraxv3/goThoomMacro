@@ -19,22 +19,200 @@
 #   run script=/mycript arg
 #   my hotkey=@hotkey ctrl-f1
 
+# ============================================================
+# CORE COMMANDS
+# ============================================================
 
-say={text}                      # "say hello all" -> sends "hello all"
-yell=\YELL {text}               # "yell help" -> "\YELL help"
+# SAY
+[say variants](ca://s?q=Expand_say_variants)=
+say={text}
+say it={text}
+say to={text}
+say all={text}
+say that={text}
+say this={text}
+say the={text}
+say something={text}
+say something to={text}
+
+# YELL
+[yell variants](ca://s?q=Expand_yell_variants)=
+yell=\YELL {text}
+yale=\YELL {text}
+y'all=\YELL {text}
+yell at=\YELL {text}
+yelll=\YELL {text}
+yelle=\YELL {text}
+yell it=\YELL {text}
+yell out=\YELL {text}
+
+# ACTION
+[action variants](ca://s?q=Expand_action_variants)=
 action=\ACTION {text}
-narrate=\NARRATE {text}
-think=\THINK {text}
-think to clan=\THINKCLAN {text} # clan private message
-think to=\THINKTO {text}        # private message: "think to bob hi"
-pose=\POSE {text}
-whisper=\WHISPER {text}      # nearby chat: "whisper to bob hi"
-equip=\EQUIP {text}             # "equip a sword" -> "\EQUIP a sword"
-unequip=\UNEQUIP {text}
+akshin=\ACTION {text}
+ak shun=\ACTION {text}
+act shin=\ACTION {text}
+action it=\ACTION {text}
+action this=\ACTION {text}
 
-# Vosk sometimes mishears "pose" - these aliases map common mishearings to the same command.
+# NARRATE
+[narrate variants](ca://s?q=Expand_narrate_variants)=
+narrate=\NARRATE {text}
+narr eight=\NARRATE {text}
+narr it=\NARRATE {text}
+narrate this=\NARRATE {text}
+narrate that=\NARRATE {text}
+
+# POSE (most misheard command)
+[pose variants](ca://s?q=Expand_pose_variants)=
+pose=\POSE {text}
 poe's=\POSE {text}
 poes=\POSE {text}
 poses=\POSE {text}
 posts=\POSE {text}
 poos=\POSE {text}
+pose's=\POSE {text}
+post=\POSE {text}
+pause=\POSE {text}
+paws=\POSE {text}
+pohs=\POSE {text}
+pohse=\POSE {text}
+
+# WHISPER
+[whisper variants](ca://s?q=Expand_whisper_variants)=
+whisper=\WHISPER {text}
+whispa=\WHISPER {text}
+whis per=\WHISPER {text}
+whisper to=\WHISPER {text}
+whisper bob=\WHISPER bob {text}
+whisper bill=\WHISPER bill {text}
+
+# EQUIP / UNEQUIP
+[equip variants](ca://s?q=Expand_equip_variants)=
+equip=\EQUIP {text}
+clip=\EQUIP {text}
+quip=\EQUIP {text}
+equip a=\EQUIP {text}
+equip the=\EQUIP {text}
+
+unequip=\UNEQUIP {text}
+un equip=\UNEQUIP {text}
+unquip=\UNEQUIP {text}
+un clip=\UNEQUIP {text}
+
+# THINK
+[think variants](ca://s?q=Expand_think_variants)=
+think=\THINK {text}
+think it=\THINK {text}
+think that=\THINK {text}
+think about=\THINK {text}
+think this=\THINK {text}
+
+# THINK TO
+[think to variants](ca://s?q=Expand_think_to_variants)=
+think to=\THINKTO {text}
+think too=\THINKTO {text}
+think two=\THINKTO {text}
+think to bob=\THINKTO bob {text}
+think to bill=\THINKTO bill {text}
+
+# THINK TO CLAN
+[think to clan variants](ca://s?q=Expand_think_to_clan_variants)=
+think to clan=\THINKCLAN {text}
+think clan=\THINKCLAN {text}
+think the clan=\THINKCLAN {text}
+think two clan=\THINKCLAN {text}
+think to plan=\THINKCLAN {text}
+
+# HOTKEY
+[hotkey variants](ca://s?q=Expand_hotkey_variants)=
+hotkey=@hotkey {text}
+hot key=@hotkey {text}
+hotkee=@hotkey {text}
+hotki=@hotkey {text}
+
+# MACRO
+[macro variants](ca://s?q=Expand_macro_variants)=
+do macro=@{text}
+macro=@{text}
+mack row=@{text}
+makro=@{text}
+macro run=@{text}
+macro do=@{text}
+
+# SCRIPT
+[script variants](ca://s?q=Expand_script_variants)=
+run script=/myscript {text}
+script run=/myscript {text}
+script it=/myscript {text}
+
+# ============================================================
+# CLAN LORD VOCABULARY FIXES
+# ============================================================
+
+# Places
+[puddleby variants](ca://s?q=Fix_Puddleby_recognition)=
+puddle bee=Puddleby
+puddle by=Puddleby
+puddle be=Puddleby
+
+orga camp=or gah camp
+dal noth=dal nawth
+east forest=east forest
+south forest=south forest
+north field=north field
+
+# Creatures
+[creature variants](ca://s?q=Fix_creature_recognition)=
+dar shack=Darshak
+or gah=Orga
+wen deck uh=Wendecka
+nawth=Noth
+un deen=Undine
+uh rack nee=Arachne
+yo rilla=Yorilla
+
+# Combat slang
+[combat slang variants](ca://s?q=Fix_combat_slang_recognition)=
+fallen=\YELL fallen
+fall in=\YELL fallen
+res q=\YELL rescue
+boost me=\THINK boost me
+chain heal=\THINK chain heal
+snell=\THINK snell
+
+# Mystic terms
+[mystic variants](ca://s?q=Fix_mystic_term_recognition)=
+ponder it=\THINK {text}
+duvin=\THINK {text}
+spirit it=\THINK {text}
+tele port=\THINK {text}
+
+# ============================================================
+# NOISE-ROBUST SHORT WORD FIXES
+# ============================================================
+
+# These catch clipped or half-heard commands.
+[noise robust variants](ca://s?q=Add_noise_robust_variants)=
+say uh={text}
+yell uh=\YELL {text}
+think uh=\THINK {text}
+pose uh=\POSE {text}
+whisp=\WHISPER {text}
+quip=\EQUIP {text}
+unquip=\UNEQUIP {text}
+act=\ACTION {text}
+nar=\NARRATE {text}
+
+# ============================================================
+# AUSTRALIAN ACCENT DRIFT FIXES
+# ============================================================
+
+# Vosk often hears AU vowels differently.
+[australian variants](ca://s?q=Add_Australian_accent_variants)=
+pohz=\POSE {text}
+pohse=\POSE {text}
+yell mate=\YELL {text}
+think mate=\THINK {text}
+whispa mate=\WHISPER {text}
+equip mate=\EQUIP {text}

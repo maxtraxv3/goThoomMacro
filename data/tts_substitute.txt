@@ -2,19 +2,147 @@
 # Each line is ORIGINAL=REPLACEMENT used to tweak TTS pronunciation.
 # Lines starting with # are ignored.
 
-#Creatures
-Darshak=dar shack
-Orga=or gah
-Wendecka=wen deck uh
-Noth=nawth
-Undine=un deen
-Arachne=uh rack nee
-Lyfelidae=lie fell ih day
-Yorilla=yo rilla
-T'rool=trool
-Scarmis=scar miss
+# ============================
+# CREATURES
+# ============================
 
-#Common places and terms
-Lok'Groton=lowk grow ton
-Anura=ah new rah
-Meshra=mesh rah
+[Darshak](ca://s?q=Darshak_pronunciation)=dar shack
+[Orga](ca://s?q=Orga_pronunciation)=or gah
+[Wendecka](ca://s?q=Wendecka_pronunciation)=wen deck uh
+[Noth](ca://s?q=Noth_pronunciation)=nawth
+[Undine](ca://s?q=Undine_pronunciation)=un deen
+[Arachne](ca://s?q=Arachne_pronunciation)=uh rack nee
+[Lyfelidae](ca://s?q=Lyfelidae_pronunciation)=lie fell ih day
+[Yorilla](ca://s?q=Yorilla_pronunciation)=yo rilla
+[T'rool](ca://s?q=T_rool_pronunciation)=trool
+[Scarmis](ca://s?q=Scarmis_pronunciation)=scar miss
+[Bolok](ca://s?q=Bolok_pronunciation)=bow lock
+[Haremau](ca://s?q=Haremau_pronunciation)=hair eh mow
+[Couatl](ca://s?q=Couatl_pronunciation)=coh ah tull
+[Greymyr](ca://s?q=Greymyr_pronunciation)=gray meer
+[Deathtrap](ca://s?q=Deathtrap_pronunciation)=deth trap
+[Wraith](ca://s?q=Wraith_pronunciation)=rayth
+[Chigger](ca://s?q=Chigger_pronunciation)=chig ger
+[Spriggin](ca://s?q=Spriggin_pronunciation)=sprig in
+[Slime](ca://s?q=Slime_pronunciation)=slyme
+[Reaper](ca://s?q=Reaper_pronunciation)=ree per
+[Hooded Figure](ca://s?q=Hooded_Figure_pronunciation)=hood ed fig yer
+[Firebird](ca://s?q=Firebird_pronunciation)=fire bird
+[Ice Drake](ca://s?q=Ice_Drake_pronunciation)=ice drayk
+[Chimera](ca://s?q=Chimera_pronunciation)=kai meer uh
+
+# ============================
+# PLACES & REGIONS
+# ============================
+
+[Lok'Groton](ca://s?q=Lok_Groton_pronunciation)=lowk grow ton
+[Puddleby](ca://s?q=Puddleby_pronunciation)=puh dull bee
+[East Forest](ca://s?q=East_Forest_pronunciation)=east for rest
+[South Forest](ca://s?q=South_Forest_pronunciation)=sowth for rest
+[North Field](ca://s?q=North_Field_pronunciation)=north feeld
+[Mountain Pass](ca://s?q=Mountain_Pass_pronunciation)=mount in pass
+[Gungnir Peak](ca://s?q=Gungnir_Peak_pronunciation)=gung neer
+[Kizmia's Island](ca://s?q=Kizmia_pronunciation)=kiz mee uh
+[Anura](ca://s?q=Anura_pronunciation)=ah new rah
+[Meshra](ca://s?q=Meshra_pronunciation)=mesh rah
+[Colmarr](ca://s?q=Colmarr_pronunciation)=coal mar
+[Dal'Noth](ca://s?q=Dal_Noth_pronunciation)=dal nawth
+[Orga Camp](ca://s?q=Orga_Camp_pronunciation)=or gah camp
+[Foothills](ca://s?q=Foothills_pronunciation)=foot hills
+[South Gate](ca://s?q=South_Gate_pronunciation)=sowth gate
+[North Gate](ca://s?q=North_Gate_pronunciation)=north gate
+[West Forest](ca://s?q=West_Forest_pronunciation)=west for rest
+[Blackrock](ca://s?q=Blackrock_pronunciation)=black rock
+[Dark Chamber](ca://s?q=Dark_Chamber_pronunciation)=dark chaym ber
+[Stronghold](ca://s?q=Stronghold_pronunciation)=strong hold
+
+# ============================
+# NPCs, CLASSES, RANKS
+# ============================
+
+[Sylvan](ca://s?q=Sylvan_pronunciation)=sill van
+[Healer](ca://s?q=Healer_pronunciation)=hee ler
+[Mystic](ca://s?q=Mystic_pronunciation)=miss tick
+[Fighter](ca://s?q=Fighter_pronunciation)=fye ter
+[Ranger](ca://s?q=Ranger_pronunciation)=rayn jer
+[Bard](ca://s?q=Bard_pronunciation)=bard
+[Thoom](ca://s?q=Thoom_pronunciation)=thoom
+[Fen](ca://s?q=Fen_pronunciation)=fenn
+[Journeyman](ca://s?q=Journeyman_pronunciation)=jer knee man
+[Adept](ca://s?q=Adept_pronunciation)=ah dept
+[Master](ca://s?q=Master_pronunciation)=mass ter
+[Champion](ca://s?q=Champion_pronunciation)=cham pee un
+[Apprentice](ca://s?q=Apprentice_pronunciation)=uh pren tiss
+
+# ============================
+# MYSTIC TERMS & MAGIC
+# ============================
+
+[Duvin](ca://s?q=Duvin_pronunciation)=doo vin
+[Ponder](ca://s?q=Ponder_pronunciation)=pon der
+[Teleport](ca://s?q=Teleport_pronunciation)=tell eh port
+[Ether](ca://s?q=Ether_pronunciation)=ee ther
+[Spirit](ca://s?q=Spirit_pronunciation)=spir rit
+[Boost](ca://s?q=Boost_pronunciation)=boosst
+[Balance](ca://s?q=Balance_pronunciation)=bal ens
+[Channel](ca://s?q=Channel_pronunciation)=chan null
+[Visionstone](ca://s?q=Visionstone_pronunciation)=vizh un stone
+[Mindstone](ca://s?q=Mindstone_pronunciation)=mind stone
+[Focus](ca://s?q=Focus_pronunciation)=foh kus
+
+# ============================
+# ITEMS & OBJECTS
+# ============================
+
+[Sunstone](ca://s?q=Sunstone_pronunciation)=sun stone
+[Moonstone](ca://s?q=Moonstone_pronunciation)=moon stone
+[Pelt](ca://s?q=Pelt_pronunciation)=pelt
+[Skull](ca://s?q=Skull_pronunciation)=skull
+[Chain](ca://s?q=Chain_pronunciation)=chain
+[Cave](ca://s?q=Cave_pronunciation)=cayv
+[Shieldstone](ca://s?q=Shieldstone_pronunciation)=sheeld stone
+[Bloodblade](ca://s?q=Bloodblade_pronunciation)=blud blayd
+[Ethercleaver](ca://s?q=Ethercleaver_pronunciation)=ee ther clee ver
+[Warpstone](ca://s?q=Warpstone_pronunciation)=warp stone
+
+# ============================
+# COMBAT & HUNT VOCABULARY
+# ============================
+
+[Fallen](ca://s?q=Fallen_pronunciation)=faw len
+[Rescue](ca://s?q=Rescue_pronunciation)=res cue
+[Push](ca://s?q=Push_pronunciation)=poosh
+[Chain Heal](ca://s?q=Chain_Heal_pronunciation)=chain heel
+[Boost Chain](ca://s?q=Boost_Chain_pronunciation)=boosst chain
+[Snell](ca://s?q=Snell_pronunciation)=snell
+[Faceplant](ca://s?q=Faceplant_pronunciation)=face plant
+[Backtrack](ca://s?q=Backtrack_pronunciation)=back track
+[Break](ca://s?q=Break_pronunciation)=brayk
+[Hold](ca://s?q=Hold_pronunciation)=hohld
+[Tag](ca://s?q=Tag_pronunciation)=tag
+
+# ============================
+# DARSHAK & ORGA TERMS
+# ============================
+
+[Darshak Priest](ca://s?q=Darshak_Priest_pronunciation)=dar shack preest
+[Darshak Elite](ca://s?q=Darshak_Elite_pronunciation)=dar shack eh leet
+[Darshak Captain](ca://s?q=Darshak_Captain_pronunciation)=dar shack cap tin
+[Orga Shaman](ca://s?q=Orga_Shaman_pronunciation)=or gah shah mun
+[Orga Hatred](ca://s?q=Orga_Hatred_pronunciation)=or gah hay tred
+[Orga Fury](ca://s?q=Orga_Fury_pronunciation)=or gah fyoo ree
+[Orga Warlock](ca://s?q=Orga_Warlock_pronunciation)=or gah war lock
+
+# ============================
+# PLAYER SLANG & COMMON TERMS
+# ============================
+
+[Boostie](ca://s?q=Boostie_pronunciation)=boos tee
+[Chainie](ca://s?q=Chainie_pronunciation)=chay nee
+[Healburst](ca://s?q=Healburst_pronunciation)=heel burst
+[Drag](ca://s?q=Drag_pronunciation)=drag
+[Farm](ca://s?q=Farm_pronunciation)=farm
+[Pop](ca://s?q=Pop_pronunciation)=pop
+[Spawn](ca://s?q=Spawn_pronunciation)=spawn
+[Zodiac](ca://s?q=Zodiac_pronunciation)=zo dee ack
+[PuddleTime](ca://s?q=PuddleTime_pronunciation)=puh dull time
