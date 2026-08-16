@@ -1,186 +1,299 @@
-name: goThoomMacro Full Multi-OS Release
+name: Release
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build-linux:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      client_version: ${{ steps.meta.outputs.client_version }}
+      deb_version: ${{ steps.meta.outputs.deb_version }}
+    steps:
+      - id: meta
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "client_version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "deb_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "client_version=dev" >> "$GITHUB_OUTPUT"
+            echo "deb_version=0.0.0+${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-linux:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLIENT_VERSION: ${{ needs.version.outputs.client_version }}
+      DEB_VERSION: ${{ needs.version.outputs.deb_version }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            xorg-dev libxrandr-dev libasound2-dev \
+            libgtk-3-dev xdg-utils \
+            dpkg-dev wget
+
+      - name: Download spellcheck dictionary
+        run: bash build-scripts/download_spellcheck_dict.sh
 
       - name: Build Linux binary
         env:
+          CGO_ENABLED: "1"
           GOOS: linux
           GOARCH: amd64
-          CGO_ENABLED: 0
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/goThoomMacro .
+          go build -trimpath \
+            -ldflags "-s -w -X main.clientVersion=${CLIENT_VERSION}" \
+            -o dist/gothoom_linux_amd64 .
 
       - name: Build .deb package
         run: |
-          # Strip 'v' from version tag, fallback to 1.0.0 if not running on a tag
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then VERSION="1.0.0"; fi
+          PKG=pkg
+          rm -rf "$PKG"
+          mkdir -p "$PKG/DEBIAN" \
+            "$PKG/usr/bin" \
+            "$PKG/usr/share/applications" \
+            "$PKG/usr/share/icons/hicolor/256x256/apps" \
+            "$PKG/usr/share/pixmaps"
 
-          mkdir -p pkg/DEBIAN
-          cat <<EOF > pkg/DEBIAN/control
-          Package: gothoommacro
-          Version: ${VERSION}
-          Section: utils
+          install -m 0755 dist/gothoom_linux_amd64 "$PKG/usr/bin/gothoom"
+          cp logo.png "$PKG/usr/share/icons/hicolor/256x256/apps/gothoom.png"
+          cp logo.png "$PKG/usr/share/pixmaps/gothoom.png"
+
+          cat > "$PKG/usr/share/applications/gothoom.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=goThoom
+          Comment=Clan Lord client
+          Exec=gothoom
+          Icon=gothoom
+          Terminal=false
+          Categories=Game;
+          EOF
+
+          cat > "$PKG/DEBIAN/control" <<EOF
+          Package: gothoom
+          Version: ${DEB_VERSION}
+          Section: games
           Priority: optional
           Architecture: amd64
           Maintainer: Maxtraxv3
-          Description: goThoomMacro macro tool
+          Homepage: https://github.com/maxtraxv3/goThoomMacro
+          Depends: libgl1, libx11-6, libxrandr2, libxinerama1, libxcursor1, libxi6, libxxf86vm1, libasound2t64 | libasound2, libgtk-3-0
+          Description: goThoom Clan Lord client
+           Cross-platform Clan Lord client.
           EOF
 
-          mkdir -p pkg/usr/local/bin
-          cp dist/goThoomMacro pkg/usr/local/bin/
-
-          dpkg-deb --build pkg dist/goThoomMacro.deb
+          dpkg-deb --root-owner-group --build "$PKG" "dist/gothoom_${DEB_VERSION}_amd64.deb"
 
       - name: Build AppImage
         run: |
-          mkdir -p appimage/usr/bin
-          cp dist/goThoomMacro appimage/usr/bin/
+          APPDIR=appimage
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin"
+          install -m 0755 dist/gothoom_linux_amd64 "$APPDIR/usr/bin/gothoom"
+          cp logo.png "$APPDIR/gothoom.png"
 
-          cat << 'EOF' > appimage/AppRun
+          cat > "$APPDIR/AppRun" <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "$HERE/usr/bin/goThoomMacro" "$@"
+          exec "$HERE/usr/bin/gothoom" "$@"
           EOF
-          chmod +x appimage/AppRun
+          chmod +x "$APPDIR/AppRun"
 
-          cat << 'EOF' > appimage/goThoomMacro.desktop
+          cat > "$APPDIR/gothoom.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
-          Name=goThoomMacro
-          Exec=goThoomMacro
-          Icon=goThoomMacro
-          Categories=Utility;
+          Name=goThoom
+          Comment=Clan Lord client
+          Exec=gothoom
+          Icon=gothoom
+          Terminal=false
+          Categories=Game;
           EOF
 
-          # appimagetool requires an icon to exist to build successfully
-          touch appimage/goThoomMacro.png
-
-          # Download official appimagetool
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
-
-          # Extract and run requires FUSE, GitHub actions requires this env var
-          APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool appimage dist/goThoomMacro.AppImage
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool "$APPDIR" dist/gothoom_linux_amd64.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-artifacts
           path: dist/*
+          if-no-files-found: error
 
   build-windows:
+    needs: version
     runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CLIENT_VERSION: ${{ needs.version.outputs.client_version }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
+
+      - name: Download spellcheck dictionary
+        run: bash build-scripts/download_spellcheck_dict.sh
+
+      - name: Embed Windows icon and manifest
+        run: |
+          go install github.com/tc-hib/go-winres@latest
+          go-winres simply --icon logo.png --arch amd64 --manifest gui
 
       - name: Build Windows EXE
         env:
+          CGO_ENABLED: "0"
           GOOS: windows
           GOARCH: amd64
-          CGO_ENABLED: 0
         run: |
-          mkdir dist
-          go build -trimpath -ldflags="-s -w" -o dist/goThoomMacro.exe .
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -H=windowsgui -X main.clientVersion=${CLIENT_VERSION}" \
+            -o dist/gothoom_windows_amd64.exe .
+          rm -f rsrc*.syso
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
           path: dist/*
+          if-no-files-found: error
 
   build-macos:
+    needs: version
     runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      CLIENT_VERSION: ${{ needs.version.outputs.client_version }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
 
-      - name: Build macOS binary
-        env:
-          GOOS: darwin
-          GOARCH: amd64
-          CGO_ENABLED: 0
+      - name: Download spellcheck dictionary
+        run: bash build-scripts/download_spellcheck_dict.sh
+
+      - name: Build macOS .app bundles (Apple Silicon and Intel)
         run: |
+          set -euo pipefail
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/goThoomMacro
 
-      - name: Create macOS .app bundle
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then VERSION="1.0.0"; fi
+          # Native icns from logo.png
+          ICONSET="$(mktemp -d)/icon.iconset"
+          mkdir -p "$ICONSET"
+          for size in 16 32 64 128 256 512; do
+            sips -z "$size" "$size" logo.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+          done
+          sips -z 32 32 logo.png --out "$ICONSET/icon_16x16@2x.png" >/dev/null
+          sips -z 64 64 logo.png --out "$ICONSET/icon_32x32@2x.png" >/dev/null
+          sips -z 256 256 logo.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null
+          sips -z 512 512 logo.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null
+          sips -z 1024 1024 logo.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+          iconutil -c icns "$ICONSET" -o dist/goThoom.icns
 
-          mkdir -p dist/goThoomMacro.app/Contents/MacOS
-          mkdir -p dist/goThoomMacro.app/Contents/Resources
+          build_app() {
+            local arch="$1"
+            local zip_name="$2"
+            local bin="dist/gothoom_darwin_${arch}"
+            local app="dist/goThoom.app"
 
-          cp dist/goThoomMacro dist/goThoomMacro.app/Contents/MacOS/
+            echo "Building darwin/${arch}..."
+            CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" \
+              go build -trimpath -tags metal \
+                -ldflags "-s -w -X main.clientVersion=${CLIENT_VERSION}" \
+                -o "$bin" .
 
-          cat <<EOF > dist/goThoomMacro.app/Contents/Info.plist
+            rm -rf "$app"
+            mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+            cp "$bin" "$app/Contents/MacOS/gothoom"
+            cp dist/goThoom.icns "$app/Contents/Resources/goThoom.icns"
+
+            cat > "$app/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-              <key>CFBundleName</key>
-              <string>goThoomMacro</string>
-              <key>CFBundleDisplayName</key>
-              <string>goThoomMacro</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.maxtraxv3.gothoommacro</string>
-              <key>CFBundleVersion</key>
-              <string>${VERSION}</string>
-              <key>CFBundleShortVersionString</key>
-              <string>${VERSION}</string>
-              <key>CFBundleExecutable</key>
-              <string>goThoomMacro</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>10.13</string>
-              <key>NSHighResolutionCapable</key>
-              <true/>
+            <key>CFBundleName</key>
+            <string>goThoom</string>
+            <key>CFBundleDisplayName</key>
+            <string>goThoom</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.goThoom.client</string>
+            <key>CFBundleVersion</key>
+            <string>${CLIENT_VERSION#v}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${CLIENT_VERSION#v}</string>
+            <key>CFBundleExecutable</key>
+            <string>gothoom</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleIconFile</key>
+            <string>goThoom</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>11.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
           </dict>
           </plist>
           EOF
 
-          # GitHub Releases cannot upload raw directories (.app). Zip it.
-          cd dist
-          zip -r goThoomMacro-macOS.zip goThoomMacro.app
-          rm -rf goThoomMacro.app # Remove unzipped version so it doesn't fail the release step
+            codesign --force --deep --sign - "$app" || echo "codesign failed, continuing"
+
+            (
+              cd dist
+              rm -f "$zip_name"
+              zip -r "$zip_name" goThoom.app
+            )
+            rm -rf "$app" "$bin"
+          }
+
+          # macos-latest is Apple Silicon; Intel is cross-compiled with CGO.
+          build_app arm64 gothoom_darwin_arm64.app.zip
+          build_app amd64 gothoom_darwin_amd64.app.zip
+          rm -f dist/goThoom.icns
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
           path: dist/*
+          if-no-files-found: error
 
   release:
-    needs: [build-linux, build-windows, build-macos]
+    needs: [version, build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Publish Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
           files: artifacts/**/*
