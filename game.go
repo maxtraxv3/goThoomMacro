@@ -1190,13 +1190,15 @@ func (g *Game) Update() error {
 		} else if continueHeldWalk(prev, inGame, ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft), heldTime, click) {
 			walk = true
 			walkToggled = false
-		} else if moveCmdActive && focused {
+		} else if moveCmdActive {
 			// /move and /follow command-walk: no manual input is steering.
+			// Unlike keyboard/mouse walking this keeps working when the
+			// window is not focused, so /follow survives an alt-tab.
 			x, y, walk = moveCmdX, moveCmdY, true
 			walkToggled = false
 		}
 	}
-	if !focused {
+	if !focused && !moveCmdActive {
 		walk = false
 	}
 
