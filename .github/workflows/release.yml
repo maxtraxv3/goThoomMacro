@@ -1,6 +1,7 @@
 name: goThoomMacro Full Multi‑OS Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
