@@ -77,14 +77,7 @@ func macroContinueOne(ex *ExecutingMacro) bool {
 			cmdStr = strings.ReplaceAll(cmdStr, "\\r", "")
 			if cmdStr != "" {
 				// Handle client-side commands synchronously
-				lower := strings.ToLower(cmdStr)
-				if strings.HasPrefix(lower, "/selectitem") {
-					arg := strings.TrimSpace(cmdStr[len("/selectitem"):])
-					handleSelectItem(arg)
-				} else if strings.HasPrefix(lower, "/select") {
-					arg := strings.TrimSpace(cmdStr[len("/select"):])
-					handleSelect(arg)
-				} else {
+				if !runClientCommand(cmdStr) {
 					enqueueCommand(cmdStr)
 				}
 			}
@@ -368,7 +361,7 @@ func macroExecuteCall(ex *ExecutingMacro, cmd *Macro) bool {
 func macroExecuteIf(ex *ExecutingMacro, cmd *Macro, mark *Mark) bool {
 	// Push a new nesting level: no branch matched yet
 	ex.IfMatched = append(ex.IfMatched, false)
-	result := macroEvalCondition(ex, cmd.Params)
+	result := macroEvalCondition(ex, cmd, cmd.Params)
 	if result {
 		// Mark this level as matched
 		ex.IfMatched[len(ex.IfMatched)-1] = true
@@ -393,7 +386,7 @@ func macroExecuteElseIf(ex *ExecutingMacro, cmd *Macro, mark *Mark) bool {
 		return false
 	}
 	// No branch taken yet — evaluate this condition
-	result := macroEvalCondition(ex, cmd.Params)
+	result := macroEvalCondition(ex, cmd, cmd.Params)
 	if result {
 		ex.IfMatched[top] = true
 	} else {
@@ -635,8 +628,12 @@ func sendWalkCommand(dx, dy int, fast bool) {
 	if fast {
 		speed = 1.0
 	}
-	keyX = int16(float64(dx) * float64(fieldCenterX) * speed)
-	keyY = int16(float64(dy) * float64(fieldCenterY) * speed)
+	moveCmdX = int16(float64(dx) * float64(fieldCenterX) * speed)
+	moveCmdY = int16(float64(dy) * float64(fieldCenterY) * speed)
+	moveCmdActive = dx != 0 || dy != 0
+	if !moveCmdActive {
+		keyStopFrames = 3
+	}
 }
 
 

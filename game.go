@@ -189,6 +189,17 @@ var keyWalkPrev bool
 var keyStopFrames int
 var joyCursorX, joyCursorY float64
 
+// moveCmdActive tracks a directional walk issued by /move, the macro "move"
+// command, or /follow. It persists until stopped (sendWalkCommand with 0,0),
+// so the character keeps walking the issued direction.
+var moveCmdActive bool
+var moveCmdX, moveCmdY int16
+
+// followTarget is the name of the player currently being followed ("" when not
+// following). While set, updateFollow steers the command-walk toward that
+// player's current position each frame.
+var followTarget string
+
 var inputActive bool
 var inputText []rune
 var inputPos int
@@ -1157,10 +1168,16 @@ func (g *Game) Update() error {
 		}
 	}
 
+	// A click in the game world is a manual action: stop following if active.
+	if click && inGame && followTarget != "" {
+		stopFollow()
+	}
+
 	// Default desired target from current pointer, even if outside game window.
 	// We'll freeze it to the previous value only when we're NOT walking.
 	x, y := baseX, baseY
 	walk := false
+	updateFollow()
 	if !uiMouseDown {
 		if keyWalk {
 			x, y, walk = keyX, keyY, true
@@ -1172,6 +1189,10 @@ func (g *Game) Update() error {
 			walk = walkToggled
 		} else if continueHeldWalk(prev, inGame, ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft), heldTime, click) {
 			walk = true
+			walkToggled = false
+		} else if moveCmdActive && focused {
+			// /move and /follow command-walk: no manual input is steering.
+			x, y, walk = moveCmdX, moveCmdY, true
 			walkToggled = false
 		}
 	}
@@ -1627,6 +1648,28 @@ func drawMicListeningBadge(dst *ebiten.Image) {
 }
 
 // drawScene renders all world objects for the current frame.
+// drawSelectedPlayerMarker draws a colored circle on the ground under the
+// currently selected player (set via /select). Mirrors the old client's
+// selection hilite, rendered just before the mobile sprite.
+func drawSelectedPlayerMarker(screen *ebiten.Image, ox, oy int, m frameMobile, descMap map[uint8]frameDescriptor) {
+	if selectedPlayerName == "" {
+		return
+	}
+	d, ok := descMap[m.Index]
+	if !ok || d.Name == "" {
+		return
+	}
+	if !strings.EqualFold(d.Name, selectedPlayerName) {
+		return
+	}
+	x := float32(roundToInt((float64(m.H)+fieldCenterX)*gs.GameScale)) + float32(ox)
+	y := float32(roundToInt((float64(m.V)+fieldCenterY)*gs.GameScale)) + float32(oy)
+	r := float32(32 * gs.GameScale)
+	accent := eui.AccentColor().ToRGBA()
+	col := color.RGBA{R: accent.R, G: accent.G, B: accent.B, A: 128}
+	vector.FillCircle(screen, x, y, r, col, false)
+}
+
 func drawScene(screen *ebiten.Image, ox, oy int, snap drawSnapshot, alpha float64, mobileFade, pictFade float32) {
 	if gs.ShaderLighting {
 		frameLights = frameLights[:0]
@@ -1654,6 +1697,7 @@ func drawScene(screen *ebiten.Image, ox, oy int, snap drawSnapshot, alpha float6
 		}
 	} else {
 		for _, m := range dead {
+			drawSelectedPlayerMarker(screen, ox, oy, m, descMap)
 			drawMobile(screen, ox, oy, m, descMap, snap.prevMobiles, snap.prevDescs, snap.picShiftX, snap.picShiftY, alpha, mobileFade, mobileLimit)
 			drawMobileNameTag(screen, snap, m, alpha)
 		}
@@ -1671,10 +1715,11 @@ func drawScene(screen *ebiten.Image, ox, oy int, snap drawSnapshot, alpha float6
 				pH = int(zeroPics[j].H)
 			}
 			if mV < pV || (mV == pV && mH <= pH) {
-				if live[i].State != poseDead {
-					drawMobile(screen, ox, oy, live[i], descMap, snap.prevMobiles, snap.prevDescs, snap.picShiftX, snap.picShiftY, alpha, mobileFade, mobileLimit)
-					drawMobileNameTag(screen, snap, live[i], alpha)
-				}
+			if live[i].State != poseDead {
+				drawSelectedPlayerMarker(screen, ox, oy, live[i], descMap)
+				drawMobile(screen, ox, oy, live[i], descMap, snap.prevMobiles, snap.prevDescs, snap.picShiftX, snap.picShiftY, alpha, mobileFade, mobileLimit)
+				drawMobileNameTag(screen, snap, live[i], alpha)
+			}
 				i++
 			} else {
 				drawPicture(screen, ox, oy, zeroPics[j], alpha, pictFade, snap.mobiles, descMap, snap.prevMobiles, snap.prevPictures, snap.picShiftX, snap.picShiftY)
@@ -2742,7 +2787,6 @@ func runGame(ctx context.Context) {
 }
 
 func initGame() {
-	ebiten.SetWindowTitle("goThoom Client")
 	ebiten.SetVsyncEnabled(gs.vsync)
 	ebiten.SetTPS(ebiten.SyncWithFPS)
 	ebiten.SetCursorShape(ebiten.CursorShapeDefault)
@@ -2750,6 +2794,7 @@ func initGame() {
 	resetInventory()
 
 	loadSettings()
+	ebiten.SetWindowTitle(gs.WindowTitle)
 	theme := gs.Theme
 	if theme == "" {
 		darkMode, err := dark.IsDarkMode()

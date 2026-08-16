@@ -3749,6 +3749,20 @@ func makeSettingsWindow() {
 	}
 	center.AddItem(voiceDD)
 
+	ttsRepeatCB, ttsRepeatEvents := eui.NewCheckbox()
+	ttsRepeatCB.Text = "Suppress repeated phrases"
+	ttsRepeatCB.Checked = gs.ChatTTSRepeatPhrase
+	ttsRepeatCB.Size = eui.Point{X: panelWidth, Y: 24}
+	ttsRepeatEvents.Handle = func(ev eui.UIEvent) {
+		if ev.Type == eui.EventCheckboxChanged {
+			SettingsLock.Lock()
+			gs.ChatTTSRepeatPhrase = ev.Checked
+			SettingsLock.Unlock()
+			settingsDirty.Store(true)
+		}
+	}
+	center.AddItem(ttsRepeatCB)
+
 	ttsTestInput, ttsTestEvents := eui.NewInput()
 	ttsTestInput.Text = ttsTestPhrase
 	ttsTestInput.TextPtr = &ttsTestPhrase

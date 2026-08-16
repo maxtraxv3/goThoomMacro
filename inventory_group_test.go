@@ -5,13 +5,16 @@ package main
 
 import "testing"
 
-func TestInventorySeparateNames(t *testing.T) {
+func TestInventoryCoalesceSameID(t *testing.T) {
 	resetInventory()
 	addInventoryItem(100, -1, "First", false)
 	addInventoryItem(100, -1, "Second", false)
 	items := getInventory()
-	if len(items) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(items))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Quantity != 2 {
+		t.Fatalf("expected quantity 2, got %d", items[0].Quantity)
 	}
 }
 

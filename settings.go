@@ -157,6 +157,7 @@ var gsdef settings = settings{
 	ChatTTSVolume:         0.33,
 	ChatTTSSpeed:          1.25,
 	ChatTTSVoice:          "en_US-hfc_female-medium",
+	ChatTTSRepeatPhrase:   true,
 	Notifications:         false,
 	NotifyWhenBackground:  false,
 	// Power saving defaults: limit FPS in background
@@ -185,6 +186,7 @@ var gsdef settings = settings{
 	ConsoleNarrateColor:   eui.NewColor(100, 255, 100, 255),
 	ConsoleActionColor:    eui.NewColor(255, 80, 80, 255),
 	ConsoleCoinColor:      eui.NewColor(255, 215, 0, 255),
+	WindowTitle:           "goThoom Client",
 	TimestampFormat:       "1/2/06 3:04:05pm",
 	LastUpdateCheck:       time.Time{},
 	NotifiedVersion:       0,
@@ -331,6 +333,8 @@ type settings struct {
 	ChatTTSSpeed          float64
 	ChatTTSVoice          string
 	ChatTTSBlocklist      []string
+	ChatTTSRepeatPhrase   bool
+	WindowTitle           string
 	Notifications         bool
 	NotifyWhenBackground  bool
 	// PowerSaveBackground reduces FPS when window is unfocused.
@@ -546,6 +550,9 @@ func loadSettings() bool {
 	}
 	if gs.ChatTTSVoice == "" {
 		gs.ChatTTSVoice = gsdef.ChatTTSVoice
+	}
+	if gs.WindowTitle == "" {
+		gs.WindowTitle = gsdef.WindowTitle
 	}
 
 	applyServerAddressSetting()

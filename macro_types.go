@@ -187,6 +187,10 @@ type ExecutingMacro struct {
 	// IfMatched tracks whether a branch was taken in the current if-chain.
 	// Each entry corresponds to a nesting level; true means a branch matched.
 	IfMatched []bool
+
+	// TextLogIfs tracks the last textlog sequence each if-node already fired
+	// on, so a polled condition doesn't re-trigger for the same line.
+	TextLogIfs map[*Macro]uint64
 }
 
 // Mark is a call-stack frame for nested function calls.
@@ -222,6 +226,10 @@ type MacroState struct {
 
 	// Last text sent to the text window (for @env.textlog)
 	TextWinLine string
+
+	// Monotonic sequence number incremented each time @env.textlog changes.
+	// Used to deduplicate polled conditions against the same textlog line.
+	TextLogSeq uint64
 
 	// @login executed flag
 	LoginExecuted bool

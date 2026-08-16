@@ -40,10 +40,19 @@ var (
 
 	lastTTSSpeaker string
 	lastTTSTime    time.Time
-	lastTTSText    string
+
+	// ttsPhraseRing remembers recently spoken phrases so repeats within the
+	// window are suppressed (see ChatTTSRepeatPhrase setting).
+	ttsPhraseRing []ttsPhrase
 
 	ttsBlockedPhrases []string
 )
+
+// ttsPhrase is a single recently spoken TTS phrase.
+type ttsPhrase struct {
+	text string
+	at   time.Time
+}
 
 func init() {
 	playChatTTSFunc = playChatTTS
@@ -265,12 +274,30 @@ func speakChatMessage(msg string) {
 		}
 	}
 
-	// Dedup: skip if same text as the last TTS utterance
-	if ttsMsg == lastTTSText {
-		logDebug("chat tts: skipping duplicate %q", ttsMsg)
+	// Skip boat "grow" messages, which repeat constantly.
+	if ttsHasGrowWord(lower) {
+		logDebug("chat tts: skipping grow message %q", ttsMsg)
 		return
 	}
-	lastTTSText = ttsMsg
+
+	// Repeat-phrase protection: skip if this phrase was spoken recently.
+	if gs.ChatTTSRepeatPhrase {
+		now := time.Now()
+		cutoff := now.Add(-10 * time.Second)
+		for _, e := range ttsPhraseRing {
+			if e.at.Before(cutoff) {
+				continue
+			}
+			if ttsMsg == e.text {
+				logDebug("chat tts: skipping repeat phrase %q", ttsMsg)
+				return
+			}
+		}
+		ttsPhraseRing = append(ttsPhraseRing, ttsPhrase{text: ttsMsg, at: now})
+		if len(ttsPhraseRing) > 64 {
+			ttsPhraseRing = ttsPhraseRing[len(ttsPhraseRing)-64:]
+		}
+	}
 
 	pendingTTSMu.Lock()
 	if pendingTTS >= 10 {
@@ -366,8 +393,7 @@ func preparePiper(dataDir string) (string, string, string, error) {
 	}
 	_ = os.Chmod(binPath, 0o755)
 
-	voicesDir := filepath.Join(piperDir, "voices")
-	// Automatically extract any voice archives placed in the voices directory.
+	voicesDir := filepath.Join(piperDir, "voices")	// Automatically extract any voice archives placed in the voices directory.
 	if archives, _ := filepath.Glob(filepath.Join(voicesDir, "*.tar.gz")); len(archives) > 0 {
 		if err := os.MkdirAll(voicesDir, 0o755); err != nil {
 			return "", "", "", err
@@ -666,4 +692,18 @@ func synthesizeWithPiper(text string) ([]byte, error) {
 		return nil, fmt.Errorf("piper run: %v: %s", err, stderr.String())
 	}
 	return out.Bytes(), nil
+}
+
+// ttsHasGrowWord reports whether the message mentions a boat "grow" event
+// (the server repeats these constantly). Only exact grow-word forms match so
+// unrelated words like "growls" are unaffected.
+func ttsHasGrowWord(lower string) bool {
+	for _, w := range strings.Fields(lower) {
+		w = strings.Trim(w, ".,!?;:\"'()[]{}")
+		switch w {
+		case "grow", "grows", "grew", "grown", "growing":
+			return true
+		}
+	}
+	return false
 }

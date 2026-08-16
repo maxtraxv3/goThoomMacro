@@ -22,6 +22,9 @@ var inventoryWin *eui.WindowData
 var inventoryList *eui.ItemData
 var inventoryDirty atomic.Bool
 
+// inventoryMaxSlots is the maximum number of inventory slots.
+const inventoryMaxSlots = 32
+
 type invRef struct {
 	id     uint16
 	idx    int
@@ -150,10 +153,9 @@ func updateInventoryWindow() {
 	anyEquipped := make(map[invGroupKey]bool)
 	order := make([]invGroupKey, 0, len(items))
 	for _, it := range items {
-		key := invGroupKey{id: it.ID, name: it.Name}
+		key := invGroupKey{id: it.ID, idx: -1}
 		if it.IDIndex >= 0 {
 			key.idx = it.IDIndex
-			key.name = ""
 		}
 		if _, seen := counts[key]; !seen {
 			order = append(order, key)
@@ -204,6 +206,15 @@ func updateInventoryWindow() {
 	invRender.clientHAvail = clientHAvail
 	invRender.scrollbarW = eui.ScrollbarWidth() / scale
 
+	// Show slot usage in the title bar so it stays visible regardless of
+	// scroll position.
+	used := len(order)
+	free := inventoryMaxSlots - used
+	inventoryWin.Title = fmt.Sprintf("Inventory   Slots: %d/%d", used, inventoryMaxSlots)
+	if free <= 5 {
+		inventoryWin.Title = fmt.Sprintf("%s (%d free)", inventoryWin.Title, free)
+	}
+
 	rows := make([]inventoryRowData, 0, len(order))
 	for _, key := range order {
 		rows = append(rows, invRender.makeRowData(key, first[key], counts[key], anyEquipped[key]))
@@ -222,6 +233,9 @@ func updateInventoryWindow() {
 		}
 		inventoryList.Size.X = clientWAvail
 		inventoryList.Size.Y = clientHAvail
+		if inventoryList.Size.Y < 0 {
+			inventoryList.Size.Y = 0
+		}
 		inventoryList.Scroll = prevScroll
 		searchTextWindow(inventoryWin, inventoryList, inventoryWin.SearchText)
 		invRender.applySelection(accent)

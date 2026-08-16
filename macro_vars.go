@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // macroResolveVariable resolves a variable reference like "@my.name" or "@env.debug".
@@ -626,7 +627,7 @@ func simplePlayerName(name string) string {
 
 // macroEvalCondition evaluates a condition like "value1 > value2".
 // Returns the boolean result.
-func macroEvalCondition(ex *ExecutingMacro, params []*Macro) bool {
+func macroEvalCondition(ex *ExecutingMacro, cmd *Macro, params []*Macro) bool {
 	if len(params) < 3 {
 		return false
 	}
@@ -634,41 +635,59 @@ func macroEvalCondition(ex *ExecutingMacro, params []*Macro) bool {
 	op := params[1].VarName
 	val2 := macroResolveExpression(ex, params[2].VarName)
 
+	result := false
+
 	// Try numeric comparison
 	n1, err1 := strconv.Atoi(val1)
 	n2, err2 := strconv.Atoi(val2)
 	if err1 == nil && err2 == nil {
 		switch op {
 		case ">":
-			return n1 > n2
+			result = n1 > n2
 		case "<":
-			return n1 < n2
+			result = n1 < n2
 		case ">=":
-			return n1 >= n2
+			result = n1 >= n2
 		case "<=":
-			return n1 <= n2
+			result = n1 <= n2
 		case "==":
-			return n1 == n2
+			result = n1 == n2
 		case "!=":
-			return n1 != n2
+			result = n1 != n2
+		}
+	} else {
+		// String comparison
+		switch op {
+		case ">":
+			result = strings.Contains(strings.ToLower(val2), strings.ToLower(val1))
+		case "<":
+			result = strings.Contains(strings.ToLower(val1), strings.ToLower(val2))
+		case ">=":
+			result = strings.Contains(strings.ToLower(val1), strings.ToLower(val2))
+		case "<=":
+			result = strings.Contains(strings.ToLower(val2), strings.ToLower(val1))
+		case "==":
+			result = strings.EqualFold(val1, val2)
+		case "!=":
+			result = !strings.EqualFold(val1, val2)
 		}
 	}
 
-	// String comparison
-	switch op {
-	case ">":
-		return strings.Contains(strings.ToLower(val2), strings.ToLower(val1))
-	case "<":
-		return strings.Contains(strings.ToLower(val1), strings.ToLower(val2))
-	case ">=":
-		return strings.Contains(strings.ToLower(val1), strings.ToLower(val2))
-	case "<=":
-		return strings.Contains(strings.ToLower(val2), strings.ToLower(val1))
-	case "==":
-		return strings.EqualFold(val1, val2)
-	case "!=":
-		return !strings.EqualFold(val1, val2)
+	// Dedup: once an if-node matches on a textlog line, don't let it re-fire
+	// for the same line on later loop/poll evaluations (even with pauses).
+	if result && ex != nil && cmd != nil {
+		tl := macroState.TextLogBuffer
+		if tl != "" && (val1 == tl || val2 == tl) {
+			seq := atomic.LoadUint64(&macroState.TextLogSeq)
+			if ex.TextLogIfs == nil {
+				ex.TextLogIfs = make(map[*Macro]uint64)
+			}
+			if last, ok := ex.TextLogIfs[cmd]; ok && last == seq {
+				return false
+			}
+			ex.TextLogIfs[cmd] = seq
+		}
 	}
 
-	return false
+	return result
 }

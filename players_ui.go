@@ -50,17 +50,18 @@ func updatePlayersWindow() {
 
 	// Gather current players and filter to non-NPCs with names.
 	ps := getPlayers()
-	// Sort: online (recently seen and not explicitly offline) first,
-	// then by label/color group, then by name.
+	// Sort: players we share to first, then players sharing us, then by
+	// label/color group, then by name.
 	sort.Slice(ps, func(i, j int) bool {
-		staleI := time.Since(ps[i].LastSeen) > 5*time.Minute
-		staleJ := time.Since(ps[j].LastSeen) > 5*time.Minute
-		offI := ps[i].Offline || staleI
-		offJ := ps[j].Offline || staleJ
-		if offI != offJ {
-			return !offI && offJ
+		shI, shJ := ps[i].Sharee, ps[j].Sharee
+		if shI != shJ {
+			return shI && !shJ
 		}
-		// Same online/offline status: sort by label group.
+		sgI, sgJ := ps[i].Sharing, ps[j].Sharing
+		if sgI != sgJ {
+			return sgI && !sgJ
+		}
+		// Same share status: sort by label group.
 		li := ps[i].FriendLabel
 		lj := ps[j].FriendLabel
 		// Treat unlabeled (0) as after labeled groups.
@@ -83,6 +84,10 @@ func updatePlayersWindow() {
 		if p.Name == "" || p.IsNPC {
 			continue
 		}
+		// Only show connected players.
+		if p.Offline || time.Since(p.LastSeen) > 5*time.Minute {
+			continue
+		}
 		if p.Sharing {
 			shareCount++
 		}
@@ -90,9 +95,7 @@ func updatePlayersWindow() {
 			shareeCount++
 		}
 		exiles = append(exiles, p)
-		if !(p.Offline || time.Since(p.LastSeen) > 5*time.Minute) {
-			onlineCount++
-		}
+		onlineCount++
 	}
 
 	myClan := ""
@@ -138,29 +141,16 @@ func updatePlayersWindow() {
 	linePx := math.Ceil(metrics.HAscent + metrics.HDescent + 2) // +2 px padding
 	rowUnits := float32(linePx) / ui
 
-	// Rebuild contents: header + one row per player
+	// Rebuild contents: one row per player
 	// Layout per row: [avatar (or default/blank)] [profession (or blank)] [name]
 	playersList.Contents = nil
 	playersRowRefs = map[*eui.ItemData]string{}
 	var selectedRow *eui.ItemData
 
-	header := fmt.Sprintf("Players Online: %d", onlineCount)
-	// Include simple share summary when relevant.
-	if shareCount > 0 || shareeCount > 0 {
-		parts := make([]string, 0, 2)
-		if shareCount > 0 {
-			parts = append(parts, fmt.Sprintf("sharing %d", shareCount))
-		}
-		if shareeCount > 0 {
-			parts = append(parts, fmt.Sprintf("sharees %d", shareeCount))
-		}
-		header = fmt.Sprintf("%s — %s", header, strings.Join(parts, ", "))
-	}
-	ht, _ := eui.NewText()
-	ht.Text = header
-	ht.FontSize = float32(fontSize)
-	ht.Size = eui.Point{X: clientWAvail, Y: rowUnits}
-	playersList.AddItem(ht)
+	// Show the online/sharing counts in the title bar so they stay visible
+	// regardless of scroll position.
+	playersWin.Title = fmt.Sprintf("Players   Online: %d   Shared: %d   Sharing: %d",
+		onlineCount, shareeCount, shareCount)
 
 	for _, p := range exiles {
 		offline := p.Offline || time.Since(p.LastSeen) > 5*time.Minute
@@ -288,6 +278,9 @@ func updatePlayersWindow() {
 	}
 	playersList.Size.X = clientWAvail
 	playersList.Size.Y = clientHAvail
+	if playersList.Size.Y < 0 {
+		playersList.Size.Y = 0
+	}
 	playersList.Scroll = prevScroll
 	searchTextWindow(playersWin, playersList, playersWin.SearchText)
 	if selectedRow != nil {
@@ -340,37 +333,98 @@ func selectPlayer(name string) {
 	updatePlayersWindow()
 }
 
+// resolvePlayerName finds a player by exact, prefix, then substring match.
+func resolvePlayerName(name string) string {
+	ps := getPlayers()
+	norm := strings.ToLower(strings.TrimSpace(name))
+	if norm == "" {
+		return ""
+	}
+	for _, p := range ps {
+		if strings.ToLower(p.Name) == norm {
+			return p.Name
+		}
+	}
+	for _, p := range ps {
+		if strings.HasPrefix(strings.ToLower(p.Name), norm) {
+			return p.Name
+		}
+	}
+	for _, p := range ps {
+		if strings.Contains(strings.ToLower(p.Name), norm) {
+			return p.Name
+		}
+	}
+	return ""
+}
+
+// orderedSelectablePlayers returns online, non-NPC players sorted by name,
+// used by /select next|previous|first|last.
+func orderedSelectablePlayers() []Player {
+	ps := getPlayers()
+	out := make([]Player, 0, len(ps))
+	for _, p := range ps {
+		if p.Name == "" || p.IsNPC {
+			continue
+		}
+		if p.Offline || time.Since(p.LastSeen) > 5*time.Minute {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out
+}
+
 // handleSelect searches the player list for a matching name and selects it.
+// It also accepts next/previous/first/last (with or without a leading "@",
+// matching classic macro syntax) to step through the player list.
 func handleSelect(name string) {
 	name = cleanMacroArg(name)
 	if name == "" {
-		consoleMessage("Usage: /select <player name>")
+		consoleMessage("Usage: /select <player name|@next|@prev|@first|@last>")
 		return
 	}
-	ps := getPlayers()
 	norm := strings.ToLower(strings.TrimSpace(name))
-	// First pass: exact match
-	for _, p := range ps {
-		if strings.ToLower(p.Name) == norm {
-			selectPlayer(p.Name)
+	norm = strings.TrimPrefix(norm, "@")
+	switch norm {
+	case "next", "previous", "prev", "first", "last":
+		list := orderedSelectablePlayers()
+		if len(list) == 0 {
+			consoleMessage("No players to select.")
 			return
 		}
-	}
-	// Second pass: prefix match
-	for _, p := range ps {
-		if strings.HasPrefix(strings.ToLower(p.Name), norm) {
-			selectPlayer(p.Name)
-			return
+		idx := 0
+		if selectedPlayerName != "" {
+			for i := range list {
+				if strings.EqualFold(list[i].Name, selectedPlayerName) {
+					idx = i
+					break
+				}
+			}
 		}
-	}
-	// Third pass: substring match
-	for _, p := range ps {
-		if strings.Contains(strings.ToLower(p.Name), norm) {
-			selectPlayer(p.Name)
-			return
+		switch norm {
+		case "first":
+			idx = 0
+		case "last":
+			idx = len(list) - 1
+		case "next":
+			idx = (idx + 1) % len(list)
+		case "previous", "prev":
+			idx = (idx - 1 + len(list)) % len(list)
 		}
+		selectPlayer(list[idx].Name)
+		consoleMessage(fmt.Sprintf("Selected %s.", list[idx].Name))
+		return
 	}
-	consoleMessage(fmt.Sprintf("No player named '%s' found in the player list.", name))
+	canonical := resolvePlayerName(name)
+	if canonical == "" {
+		consoleMessage(fmt.Sprintf("No player named '%s' found in the player list.", name))
+		return
+	}
+	selectPlayer(canonical)
 }
 
 func openPlayersContextMenu(name string, pos eui.Point) {

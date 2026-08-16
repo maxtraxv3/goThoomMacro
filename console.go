@@ -48,6 +48,7 @@ func consoleMessage(msg string) {
 // client, the line carries the ClanLord timestamp prefix when timestamps are
 // enabled for its channel. Local feedback must never go through here.
 func updateTextLog(msg string, stamped bool) {
+	atomic.AddUint64(&macroState.TextLogSeq, 1)
 	if stamped {
 		macroState.TextLogBuffer = macroTextLogStamp() + msg
 	} else {

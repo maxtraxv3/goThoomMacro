@@ -19,6 +19,19 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 - Drop-in compatible with existing Clan Lord macro files
 - Macro hotkeys displayed in the Hotkeys UI with source file and line number attribution
 
+### Client Slash Commands
+
+Client-side slash commands are handled locally (never sent to the server) and work from the chat input bar, the macro/script command queue, and speech-to-text:
+
+- `/move <n|ne|e|se|s|sw|w|nw|stop> [run|walk]` — walks in the given compass direction. A bare `/move` or `/move stop` stops. Append `run` for full-speed movement (defaults to the keyboard walk speed). The walk persists until stopped, so you can move in one direction while chatting.
+- `/select <player|@next|@prev|@first|@last>` — selects a player (by exact, prefix, or substring name) or cycles through the online player list.
+- `/selectitem <name>` — selects an inventory item by exact base name, then prefix/substring match; a bare `/selectitem` clears the selection.
+- `/label <player> [label]` — assigns a friend label (0-10, or a label name) to a player; label `0` clears it.
+- `/wholabel [label]` — lists friends, optionally filtered to a specific label.
+- `/pref <movement hold|toggle> | <shownames|timestamps|message fallen|message clanning> <on|off> | <soundvolume|bardvolume|maxnight> <0-100>` — changes client settings from the command line; preferences without a client equivalent report that they are not implemented.
+- `/record [on|off]` — toggles movie recording (a bare `/record` toggles).
+- `/notts add|remove <name> | list` — manages the speech-to-text (TTS) blocklist.
+
 ### Hotkey System Enhancements
 
 - Macro key/click bindings shown in the Hotkeys window (read-only, with source file:line)
@@ -27,6 +40,8 @@ This fork builds on the original goThoom client with a focus on full Clan Lord m
 ### UI Changes
 
 - "Combine chat + console" toggle now works correctly in both directions
+- Players window title shows live counts that stay visible regardless of scroll position: `Players   Online: N   Shared: N   Sharing: N`
+- Inventory window title shows slot usage that stays visible regardless of scroll position: `Inventory   Slots: N/M`, plus `(N free)` when fewer than 5 slots remain
 - WASD movement toggle in Settings > Interface (under Controls)
 - Gamepad settings button in Settings > Interface (under Controls)
 - Transparent window option with background color picker
@@ -87,6 +102,7 @@ Offline speech-to-text powered by Vosk, with no cloud service:
 
 ### Bug Fixes
 
+- `/move` (and the macro `move` command) now actually moves the character when issued from chat, macros, or speech-to-text: the command walk is now routed through the same movement input as keyboard and mouse steering, instead of being dropped
 - Click macros (control-click, shift-click2, etc.) now fire correctly
 - Backward `goto` always yields (matches original ClanLaw client behavior)
 - `@env.textlog` macros work in `@login` (function macros default to unfriendly mode)

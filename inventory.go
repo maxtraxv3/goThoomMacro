@@ -127,21 +127,49 @@ func addInventoryItem(id uint16, idx int, name string, equip bool) {
 		item := InventoryItem{ID: id, Name: disp, Base: base, Extra: extra, Equipped: equip, Index: len(inventoryItems), IDIndex: idx, Quantity: 1}
 		inventoryItems = append(inventoryItems, item)
 	} else {
-		// Legacy/non-template: coalesce by ID only when normalized names match.
-		found := false
-		normName := normalizeInventoryName(name)
-		for i := range inventoryItems {
-			if inventoryItems[i].ID == id && inventoryItems[i].IDIndex < 0 && normalizeInventoryName(inventoryItems[i].Name) == normName {
-				inventoryItems[i].Quantity++
-				if equip {
-					inventoryItems[i].Equipped = true
-				}
-				found = true
-				break
+		// Legacy/non-template stackables: coalesce by item ID and base name.
+		// Renames apply to every instance of an ID, so a custom name or a
+		// differently-worded packet name must not split one stack into its
+		// own separate inventory rows.
+		base := ""
+		if clImages != nil {
+			if n := clImages.ItemName(uint32(id)); n != "" {
+				base = n
 			}
 		}
+		if base == "" {
+			if n, ok := defaultInventoryNames[id]; ok {
+				base = n
+			} else {
+				base = name
+			}
+		}
+		custom, _ := inventoryNames[inventoryKey{ID: id, IDIndex: -1}]
+		found := false
+		for i := range inventoryItems {
+			if inventoryItems[i].ID != id || inventoryItems[i].IDIndex >= 0 {
+				continue
+			}
+			existingBase := inventoryItems[i].Base
+			if p := strings.Index(existingBase, " <"); p >= 0 {
+				existingBase = existingBase[:p]
+			}
+			if existingBase != base {
+				continue
+			}
+			inventoryItems[i].Quantity++
+			if equip {
+				inventoryItems[i].Equipped = true
+			}
+			found = true
+			break
+		}
 		if !found {
-			item := InventoryItem{ID: id, Name: name, Base: name, Extra: "", Equipped: equip, Index: len(inventoryItems), IDIndex: -1, Quantity: 1}
+			disp := base
+			if custom != "" && normalizeInventoryName(custom) != normalizeInventoryName(base) {
+				disp = fmt.Sprintf("%s <%s>", base, custom)
+			}
+			item := InventoryItem{ID: id, Name: disp, Base: base, Extra: custom, Equipped: equip, Index: len(inventoryItems), IDIndex: -1, Quantity: 1}
 			inventoryItems = append(inventoryItems, item)
 		}
 	}
@@ -485,7 +513,9 @@ func setFullInventory(ids []uint16, equipped []bool) {
 			disp = fmt.Sprintf("%s <%s>", base, name)
 		}
 
-		gk := groupKey{id: id, name: normalizeInventoryName(disp)}
+		// Legacy stackables coalesce by ID only (renames apply to every
+		// instance of an ID, so name text must not split the stack).
+		gk := groupKey{id: id}
 		if pos, ok := groupPos[gk]; ok {
 			grouped[pos].Quantity++
 			if equip {
