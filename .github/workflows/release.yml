@@ -1,4 +1,4 @@
-name: goThoomMacro Full Multi‑OS Release
+name: goThoomMacro Full Multi-OS Release
 
 on:
   workflow_dispatch:
@@ -27,14 +27,20 @@ jobs:
 
       - name: Build .deb package
         run: |
+          # Strip 'v' from version tag, fallback to 1.0.0 if not running on a tag
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then VERSION="1.0.0"; fi
+
           mkdir -p pkg/DEBIAN
-          echo "Package: gothoommacro
-Version: ${{ github.ref_name }}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: Maxtraxv3
-Description: goThoomMacro macro tool" > pkg/DEBIAN/control
+          cat <<EOF > pkg/DEBIAN/control
+          Package: gothoommacro
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Maxtraxv3
+          Description: goThoomMacro macro tool
+          EOF
 
           mkdir -p pkg/usr/local/bin
           cp dist/goThoomMacro pkg/usr/local/bin/
@@ -43,23 +49,34 @@ Description: goThoomMacro macro tool" > pkg/DEBIAN/control
 
       - name: Build AppImage
         run: |
-          sudo apt-get update
-          sudo apt-get install -y appimagetool
-
           mkdir -p appimage/usr/bin
           cp dist/goThoomMacro appimage/usr/bin/
 
-          echo '#!/bin/sh
-          exec "$APPDIR/usr/bin/goThoomMacro"' > appimage/AppRun
+          cat << 'EOF' > appimage/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/usr/bin/goThoomMacro" "$@"
+          EOF
           chmod +x appimage/AppRun
 
-          echo "[Desktop Entry]
+          cat << 'EOF' > appimage/goThoomMacro.desktop
+          [Desktop Entry]
           Type=Application
           Name=goThoomMacro
           Exec=goThoomMacro
-          Icon=goThoomMacro" > appimage/goThoomMacro.desktop
+          Icon=goThoomMacro
+          Categories=Utility;
+          EOF
 
-          appimagetool appimage dist/goThoomMacro.AppImage
+          # appimagetool requires an icon to exist to build successfully
+          touch appimage/goThoomMacro.png
+
+          # Download official appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+
+          # Extract and run requires FUSE, GitHub actions requires this env var
+          APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool appimage dist/goThoomMacro.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
@@ -109,14 +126,15 @@ Description: goThoomMacro macro tool" > pkg/DEBIAN/control
 
       - name: Create macOS .app bundle
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then VERSION="1.0.0"; fi
 
-          mkdir -p goThoomMacro.app/Contents/MacOS
-          mkdir -p goThoomMacro.app/Contents/Resources
+          mkdir -p dist/goThoomMacro.app/Contents/MacOS
+          mkdir -p dist/goThoomMacro.app/Contents/Resources
 
-          cp dist/goThoomMacro goThoomMacro.app/Contents/MacOS/
+          cp dist/goThoomMacro dist/goThoomMacro.app/Contents/MacOS/
 
-          cat > goThoomMacro.app/Contents/Info.plist <<EOF
+          cat <<EOF > dist/goThoomMacro.app/Contents/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -144,7 +162,10 @@ Description: goThoomMacro macro tool" > pkg/DEBIAN/control
           </plist>
           EOF
 
-          mv goThoomMacro.app dist/
+          # GitHub Releases cannot upload raw directories (.app). Zip it.
+          cd dist
+          zip -r goThoomMacro-macOS.zip goThoomMacro.app
+          rm -rf goThoomMacro.app # Remove unzipped version so it doesn't fail the release step
 
       - uses: actions/upload-artifact@v4
         with:
