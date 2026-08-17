@@ -2,6 +2,7 @@ package eui
 
 import (
 	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -352,6 +353,14 @@ func Update() error {
 		}
 	}
 
+	// Show pointer cursor when hovering over a URL in a text item.
+	if hoveredItem != nil && hoveredItem.ItemType == ITEM_TEXT && hoveredItem.OnURLClick != nil && c == ebiten.CursorShapeDefault {
+		idx := hoveredItem.cursorIndexAt(mpos)
+		if hoveredItem.urlAtChar(idx) != "" {
+			c = ebiten.CursorShapePointer
+		}
+	}
+
 	if cursorShape != c {
 		ebiten.SetCursorShape(c)
 		cursorShape = c
@@ -519,6 +528,15 @@ func Update() error {
 			focusedItem.Focused = false
 			focusedItem.markDirty()
 			focusedItem = nil
+		}
+	}
+
+	// Ctrl+C to copy selected text (works on any text item with a selection).
+	if ctrlPressed && inpututil.IsKeyJustPressed(ebiten.KeyC) {
+		if hoveredItem != nil && hoveredItem.ItemType == ITEM_TEXT && hoveredItem.SelectStart != hoveredItem.SelectEnd {
+			if sel := hoveredItem.SelectedText(); sel != "" {
+				clipboard.Write(clipboard.FmtText, []byte(sel))
+			}
 		}
 	}
 
@@ -764,6 +782,20 @@ func (item *itemData) clickItem(mpos point, click bool) bool {
 	if click {
 		activeItem = item
 		item.Clicked = time.Now()
+		// Start text selection on click.
+		if item.ItemType == ITEM_TEXT {
+			idx := item.cursorIndexAt(mpos)
+			item.SelectStart = idx
+			item.SelectEnd = idx
+			item.selecting = true
+			item.markDirty()
+			// Open URL on click.
+			if item.OnURLClick != nil {
+				if u := item.urlAtChar(idx); u != "" {
+					item.OnURLClick(u)
+				}
+			}
+		}
 		if item.ItemType == ITEM_SLIDER {
 			// Record drag start state for precision-drag (Ctrl) behavior
 			item.dragStart = mpos
@@ -898,6 +930,19 @@ func (item *itemData) clickItem(mpos point, click bool) bool {
 				item.Action()
 			}
 		}
+		// Drag-to-select on text items.
+		if item.ItemType == ITEM_TEXT && item.selecting && pointerPressed() && downWin == item.ParentWindow {
+			idx := item.cursorIndexAt(mpos)
+			if idx != item.SelectEnd {
+				item.SelectEnd = idx
+				item.markDirty()
+			}
+		}
+	}
+	// Finalize selection when mouse is released.
+	if !pointerPressed() && item.selecting {
+		item.selecting = false
+		item.markDirty()
 	}
 	return true
 }
@@ -938,6 +983,46 @@ func (item *itemData) cursorIndexAt(mpos point) int {
 		advance += float32(w)
 	}
 	return pos + len(runes)
+}
+
+// SelectedText returns the currently selected text range for this item.
+func (item *itemData) SelectedText() string {
+	if item.SelectStart == item.SelectEnd {
+		return ""
+	}
+	runes := []rune(item.Text)
+	a, b := item.SelectStart, item.SelectEnd
+	if a > b {
+		a, b = b, a
+	}
+	if a < 0 {
+		a = 0
+	}
+	if b > len(runes) {
+		b = len(runes)
+	}
+	return string(runes[a:b])
+}
+
+var urlRe = regexp.MustCompile(`https?://[^\s<>"')\]]+`)
+
+// urlRanges returns spans for HTTP/HTTPS URLs found in the item text.
+func (item *itemData) urlRanges() []TextSpan {
+	var spans []TextSpan
+	for _, m := range urlRe.FindAllStringIndex(item.Text, -1) {
+		spans = append(spans, TextSpan{Start: m[0], End: m[1]})
+	}
+	return spans
+}
+
+// urlAtChar returns the URL string if the rune index falls inside one, else "".
+func (item *itemData) urlAtChar(idx int) string {
+	for _, s := range item.urlRanges() {
+		if idx >= s.Start && idx < s.End {
+			return item.Text[s.Start:s.End]
+		}
+	}
+	return ""
 }
 
 func uncheckRadioGroup(parent *itemData, group string, except *itemData) {

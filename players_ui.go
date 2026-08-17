@@ -85,7 +85,7 @@ func updatePlayersWindow() {
 			continue
 		}
 		// Only show connected players.
-		if p.Offline || time.Since(p.LastSeen) > 5*time.Minute {
+		if p.Offline {
 			continue
 		}
 		if p.Sharing {
@@ -153,7 +153,7 @@ func updatePlayersWindow() {
 		onlineCount, shareeCount, shareCount)
 
 	for _, p := range exiles {
-		offline := p.Offline || time.Since(p.LastSeen) > 5*time.Minute
+		offline := p.Offline
 		name := p.Name
 		tags := make([]string, 0, 3)
 		if p.Sharee {
@@ -367,7 +367,7 @@ func orderedSelectablePlayers() []Player {
 		if p.Name == "" || p.IsNPC {
 			continue
 		}
-		if p.Offline || time.Since(p.LastSeen) > 5*time.Minute {
+		if p.Offline {
 			continue
 		}
 		out = append(out, p)

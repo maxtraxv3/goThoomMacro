@@ -4087,6 +4087,7 @@ func makeConsoleColorPickerWindow() {
 	addColorRow("Narrate", &gs.ConsoleNarrateColor)
 	addColorRow("Action", &gs.ConsoleActionColor)
 	addColorRow("Coin", &gs.ConsoleCoinColor)
+	addColorRow("Clan", &gs.ConsoleClanColor)
 
 	resetBtn, resetEvents := eui.NewButton()
 	resetBtn.Text = "Reset to Defaults"
@@ -4103,6 +4104,7 @@ func makeConsoleColorPickerWindow() {
 			gs.ConsoleNarrateColor = gsdef.ConsoleNarrateColor
 			gs.ConsoleActionColor = gsdef.ConsoleActionColor
 			gs.ConsoleCoinColor = gsdef.ConsoleCoinColor
+			gs.ConsoleClanColor = gsdef.ConsoleClanColor
 			settingsDirty.Store(true)
 			updateConsoleWindow()
 			if consoleColorPickerWin != nil {

@@ -195,6 +195,11 @@ var joyCursorX, joyCursorY float64
 var moveCmdActive bool
 var moveCmdX, moveCmdY int16
 
+// macroKeyJustFired is set when a macro or hotkey consumed a key this frame.
+// The console input section checks this to prevent the consumed key from also
+// being typed into the chat box.
+var macroKeyJustFired bool
+
 // followTarget is the name of the player currently being followed ("" when not
 // following). While set, updateFollow steers the command-walk toward that
 // player's current position each frame.
@@ -797,6 +802,20 @@ func (g *Game) Update() error {
 		}
 	}
 
+	// Process macro and hotkey key events before console input so we can
+	// suppress the character from being typed into the chat box when a
+	// bound key fires.
+	macroKeyJustFired = false
+	updateHotkeyRecording()
+	if !macroProcessKeyEvents() {
+		if checkHotkeys() {
+			macroKeyJustFired = true
+		}
+	} else {
+		macroKeyJustFired = true
+	}
+	macroContinue()
+
 	/* Console input */
 	changedInput := false
 	textChanged := false
@@ -809,7 +828,13 @@ func (g *Game) Update() error {
 		textChanged = true
 	}
 	if inputActive {
-		if newChars := ebiten.AppendInputChars(nil); len(newChars) > 0 {
+		if macroKeyJustFired {
+			// A macro or hotkey consumed a key this frame; drain the
+			// character buffer so the bound key doesn't also type into
+			// the chat box.
+			ebiten.AppendInputChars(nil)
+			macroKeyJustFired = false
+		} else if newChars := ebiten.AppendInputChars(nil); len(newChars) > 0 {
 			if inputPos < 0 {
 				inputPos = 0
 			}
@@ -1168,9 +1193,15 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// A click in the game world is a manual action: stop following if active.
-	if click && inGame && followTarget != "" {
-		stopFollow()
+	// A click in the game world is a manual action: stop following and
+	// command-walk if active.
+	if click && inGame {
+		if followTarget != "" {
+			stopFollow()
+		}
+		if moveCmdActive {
+			moveCmdActive = false
+		}
 	}
 
 	// Default desired target from current pointer, even if outside game window.
@@ -1237,12 +1268,6 @@ func (g *Game) Update() error {
 			lowFPSSince = time.Time{}
 		}
 	}
-
-	updateHotkeyRecording()
-	if !macroProcessKeyEvents() {
-		checkHotkeys()
-	}
-	macroContinue()
 
 	return nil
 }

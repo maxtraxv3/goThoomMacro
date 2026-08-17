@@ -114,5 +114,10 @@ func consoleMessageColor(msg string) *color.RGBA {
 		c := gs.ConsoleCoinColor.ToRGBA()
 		return &c
 	}
+	// Clan marker: messages containing "•" or "*"
+	if strings.Contains(s, "•") || strings.Contains(s, "*") {
+		c := gs.ConsoleClanColor.ToRGBA()
+		return &c
+	}
 	return nil
 }

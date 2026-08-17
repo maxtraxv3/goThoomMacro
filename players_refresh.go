@@ -1,11 +1,10 @@
 package main
 
-import (
-	"time"
-)
+import "time"
 
 // players maintenance state machine handling /be-who, /be-share and /be-info.
-// It also tracks LastSeen times to refresh the UI when players age out.
+// The /be-who scan is the authoritative source for who is online; after each
+// scan completes, players not listed are marked Offline.
 
 // internal phases
 const (
@@ -17,33 +16,12 @@ const (
 var (
 	playersPhase   = phaseWho
 	playersLastCmd time.Time
-	playersOffline = map[string]bool{}
 	whoRequested   bool
 )
 
-const playersOfflineThreshold = 5 * time.Minute
-
-// requestPlayersData progresses the maintenance state machine and
-// updates playersDirty when LastSeen crosses the offline threshold.
+// requestPlayersData progresses the maintenance state machine.
 func requestPlayersData() {
-	// Cache time once to avoid repeated runtimeNow calls.
 	now := time.Now()
-
-	// track offline transitions
-	changed := false
-	playersMu.RLock()
-	for name, p := range players {
-		// Use the cached now to avoid per-iteration time.Now()
-		offline := now.Sub(p.LastSeen) > playersOfflineThreshold
-		if prev, ok := playersOffline[name]; !ok || prev != offline {
-			playersOffline[name] = offline
-			changed = true
-		}
-	}
-	playersMu.RUnlock()
-	if changed {
-		playersDirty.Store(true)
-	}
 
 	if pendingCommand != "" {
 		return
@@ -67,7 +45,8 @@ func requestPlayersData() {
 			whoRequested = true
 			return
 		}
-		// who scan finished
+		// who scan finished — mark players absent from the scan as offline.
+		markWhoAbsentOffline()
 		playersPhase = phaseShare
 		whoRequested = false
 	case phaseShare:
@@ -80,5 +59,28 @@ func requestPlayersData() {
 		} else if !whoActive {
 			playersPhase = phaseWho
 		}
+	}
+}
+
+// markWhoAbsentOffline sets Offline=true for every player whose beWho flag
+// is still false after a completed scan.  The current player is exempted.
+func markWhoAbsentOffline() {
+	playersMu.Lock()
+	changed := false
+	for name, p := range players {
+		if p.beWho {
+			continue
+		}
+		if name == playerName {
+			continue
+		}
+		if !p.Offline {
+			p.Offline = true
+			changed = true
+		}
+	}
+	playersMu.Unlock()
+	if changed {
+		playersDirty.Store(true)
 	}
 }

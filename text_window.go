@@ -8,6 +8,7 @@ import (
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	text "github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/pkg/browser"
 )
 
 var (
@@ -137,6 +138,7 @@ func updateTextWindow(win *eui.WindowData, list, input *eui.ItemData, msgs []str
 			t.FontSize = float32(fontSize)
 			t.Face = face
 			t.Size = eui.Point{X: contentW, Y: rowUnits * float32(linesN)}
+			t.OnURLClick = func(url string) { browser.OpenURL(url) }
 			// Append to maintain ordering with the msgs index
 			list.AddItem(t)
 		}

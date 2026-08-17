@@ -4,6 +4,7 @@ package main
 
 import (
 	"gothoom/eui"
+	"strings"
 	"time"
 
 	clipboard "golang.design/x/clipboard"
@@ -27,6 +28,10 @@ func updateChatWindow() {
 		for i, msg := range msgs {
 			if chatHasPlayerTag(msg) {
 				chatList.Contents[i].TextColor = eui.AccentColor()
+				chatList.Contents[i].ForceTextColor = true
+			} else if gs.ConsoleColors && (strings.Contains(msg, "•") || strings.Contains(msg, "*")) {
+				c := gs.ConsoleClanColor.ToRGBA()
+				chatList.Contents[i].TextColor = eui.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 				chatList.Contents[i].ForceTextColor = true
 			} else {
 				chatList.Contents[i].ForceTextColor = false

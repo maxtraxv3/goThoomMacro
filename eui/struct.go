@@ -187,6 +187,10 @@ type itemData struct {
 	SecretText    string
 	HideText      bool
 	CursorPos     int
+	SelectStart   int
+	SelectEnd     int
+	selecting     bool
+	OnURLClick    func(url string)
 	Handler       *EventHandler
 	Contents      []*itemData
 

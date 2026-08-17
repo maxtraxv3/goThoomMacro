@@ -50,6 +50,9 @@ Client-side slash commands are handled locally (never sent to the server) and wo
 - Default timestamp format changed to match text logs (`1/2/06 3:04:05pm`)
 - Color-coded console messages: yells, ponders, thinks, narrates, actions, coins — each with individually customizable color via HSV color picker in Settings. Click "Customize Colors..." after enabling. Defaults: yell=yellow, action=red, think/narrate=green, ponder=purple, coin=gold. Enabled by default, toggle in Settings.
 - TTS blocklist management in Advanced Settings (add blocked speakers, "More Piper voices..." link to download additional voices)
+- **Text selection and copy**: Click and drag to select text in the console, chat, and any text window. Press Ctrl+C to copy the selected text to the clipboard.
+- **Clickable URLs**: HTTP and HTTPS links in console and chat messages are highlighted with a blue underline and open in your default browser when clicked.
+- **Clan marker color**: Messages containing clan bullet markers (`•` or `*`) are colored with a customizable "Clan" color (brown-red default). Customize via Settings > Customize Colors, or reset to defaults.
 
 ### Speech to Text (Vosk)
 
@@ -102,7 +105,10 @@ Offline speech-to-text powered by Vosk, with no cloud service:
 
 ### Bug Fixes
 
-- `/move` (and the macro `move` command) now actually moves the character when issued from chat, macros, or speech-to-text: the command walk is now routed through the same movement input as keyboard and mouse steering, instead of being dropped
+- **`/move` command actually works**: Command-walk (from chat, macros, or speech-to-text) now routes through the same movement system as keyboard and mouse steering, instead of being silently dropped
+- **Macro keys in chat input**: Typing in the chat input bar no longer accidentally triggers macro hotkeys
+- **`/move` and macro `move` cancel on click**: Clicking in the game world now cancels an active `/move` or macro `move` command, just as it cancels manual keyboard movement
+- **Player list accuracy**: The players window no longer hides players after a timeout; players are marked offline only after a `/who` scan confirms they have logged off (matching old Clan Lord client behavior)
 - Click macros (control-click, shift-click2, etc.) now fire correctly
 - Backward `goto` always yields (matches original ClanLaw client behavior)
 - `@env.textlog` macros work in `@login` (function macros default to unfriendly mode)

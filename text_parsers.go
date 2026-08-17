@@ -463,7 +463,7 @@ func parsePresenceText(raw []byte, s string) bool {
 		return true
 	}
 	// Logout-like phrases
-	if strings.Contains(lower, "has logged off") || strings.Contains(lower, "has left the lands") || strings.Contains(lower, "has left the world") || strings.Contains(lower, "has departed") || strings.Contains(lower, "has signed off") {
+	if strings.Contains(lower, "has logged off") || strings.Contains(lower, "has left the lands") || strings.Contains(lower, "has left the world") || strings.Contains(lower, "has departed") || strings.Contains(lower, "has signed off") || strings.Contains(lower, "is not in the lands") {
 		playersMu.Lock()
 		if p, ok := players[name]; ok {
 			p.Offline = true

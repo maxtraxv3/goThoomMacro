@@ -1595,6 +1595,69 @@ func (item *itemData) drawItemInternal(parent *itemData, offset point, base poin
 				1, style.TextColor, false)
 		}
 
+		// Draw selection highlight.
+		if item.SelectStart != item.SelectEnd && len(item.Text) > 0 {
+			sa, sb := item.SelectStart, item.SelectEnd
+			if sa > sb {
+				sa, sb = sb, sa
+			}
+			runes := []rune(item.Text)
+			if sa < 0 {
+				sa = 0
+			}
+			if sb > len(runes) {
+				sb = len(runes)
+			}
+			selColor := color.NRGBA{R: 0x33, G: 0x99, B: 0xFF, A: 0x88}
+			// Find line positions for start and end.
+			lineStarts := []int{0}
+			for i, r := range runes {
+				if r == '\n' {
+					lineStarts = append(lineStarts, i+1)
+				}
+			}
+			endLine := len(lineStarts) - 1
+			for i := len(lineStarts) - 1; i >= 0; i-- {
+				if lineStarts[i] <= sb {
+					endLine = i
+					break
+				}
+			}
+			startLine := 0
+			for i := len(lineStarts) - 1; i >= 0; i-- {
+				if lineStarts[i] <= sa {
+					startLine = i
+					break
+				}
+			}
+			for ln := startLine; ln <= endLine; ln++ {
+				ls := lineStarts[ln]
+				le := len(runes)
+				if ln+1 < len(lineStarts) {
+					le = lineStarts[ln+1] - 1
+				}
+				xs := sa
+				if xs < ls {
+					xs = ls
+				}
+				xe := sb
+				if xe > le {
+					xe = le
+				}
+				prefixW, _ := text.Measure(string(runes[ls:xs]), face, 0)
+				selW, _ := text.Measure(string(runes[xs:xe]), face, 0)
+				baseY := offset.Y + float32(ln)*lineSpacing + float32(metrics.HAscent)
+				topY := baseY - float32(math.Ceil(metrics.HAscent))
+				botY := baseY + float32(math.Ceil(metrics.HDescent))
+				drawRoundRect(subImg, &roundRect{
+					Size:     point{X: float32(selW), Y: botY - topY},
+					Position: point{X: offset.X + float32(prefixW), Y: topY},
+					Filled:   true,
+					Color:    Color{R: selColor.R, G: selColor.G, B: selColor.B, A: selColor.A},
+				})
+			}
+		}
+
 		if len(item.Underlines) > 0 {
 			rs := []rune(item.Text)
 			for _, ul := range item.Underlines {
@@ -1620,6 +1683,36 @@ func (item *itemData) drawItemInternal(parent *itemData, offset point, base poin
 					offset.X+float32(x0+w), y,
 					1,
 					color.NRGBA{R: 0xFF, G: 0x00, B: 0x00, A: 0xFF}, true)
+			}
+		}
+
+		// Draw URL underlines.
+		if item.OnURLClick != nil {
+			rs := []rune(item.Text)
+			for _, s := range item.urlRanges() {
+				if s.Start < 0 || s.End > len(rs) || s.Start >= s.End {
+					continue
+				}
+				line := 0
+				lineStart := 0
+				for i := 0; i < s.Start; i++ {
+					if rs[i] == '\n' {
+						line++
+						lineStart = i + 1
+					}
+				}
+				prefix := string(rs[lineStart:s.Start])
+				x0, _ := text.Measure(prefix, face, 0)
+				word := string(rs[s.Start:s.End])
+				w, _ := text.Measure(word, face, 0)
+				baseY := offset.Y + float32(line)*lineSpacing + float32(metrics.HAscent)
+				y := baseY + 1
+				urlColor := color.NRGBA{R: 0x66, G: 0xAA, B: 0xFF, A: 0xFF}
+				vector.StrokeLine(subImg,
+					offset.X+float32(x0), y,
+					offset.X+float32(x0+w), y,
+					1,
+					urlColor, true)
 			}
 		}
 
