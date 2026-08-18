@@ -44,8 +44,6 @@ func updatePlayersWindow() {
 		return
 	}
 
-	accent := eui.AccentColor()
-
 	prevScroll := playersList.Scroll
 
 	// Gather current players and filter to non-NPCs with names.
@@ -285,7 +283,7 @@ func updatePlayersWindow() {
 	searchTextWindow(playersWin, playersList, playersWin.SearchText)
 	if selectedRow != nil {
 		selectedRow.Filled = true
-		selectedRow.Color = accent
+		selectedRow.Color = gs.SelectionColor
 	}
 	playersWin.Refresh()
 }
@@ -421,7 +419,12 @@ func handleSelect(name string) {
 	}
 	canonical := resolvePlayerName(name)
 	if canonical == "" {
-		consoleMessage(fmt.Sprintf("No player named '%s' found in the player list.", name))
+		if selectedPlayerName != "" {
+			selectPlayer("")
+			consoleMessage(fmt.Sprintf("No player named '%s' found; selection cleared.", name))
+		} else {
+			consoleMessage(fmt.Sprintf("No player named '%s' found in the player list.", name))
+		}
 		return
 	}
 	selectPlayer(canonical)

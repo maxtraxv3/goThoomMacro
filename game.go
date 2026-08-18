@@ -1692,8 +1692,8 @@ func drawSelectedPlayerMarker(screen *ebiten.Image, ox, oy int, m frameMobile, d
 	x := float32(roundToInt((float64(m.H)+fieldCenterX)*gs.GameScale)) + float32(ox)
 	y := float32(roundToInt((float64(m.V)+fieldCenterY)*gs.GameScale)) + float32(oy)
 	r := float32(32 * gs.GameScale)
-	accent := eui.AccentColor().ToRGBA()
-	col := color.RGBA{R: accent.R, G: accent.G, B: accent.B, A: 128}
+	sc := gs.SelectionColor.ToRGBA()
+	col := color.RGBA{R: sc.R, G: sc.G, B: sc.B, A: 128}
 	vector.FillCircle(screen, x, y, r, col, false)
 }
 

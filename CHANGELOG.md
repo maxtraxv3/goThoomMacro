@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.4
+
+### New Features
+
+- **Selection color setting**: The `/select` player marker (circle on the ground) and players window highlight now use a dedicated "Selection" color (blue default) instead of the global accent color. Customize via Settings > Customize Colors, or reset to defaults.
+- **`/select` clears on miss**: Using `/select <name>` with a name that doesn't match any player now clears the current selection instead of silently doing nothing.
+
+### Bug Fixes
+
+- **Lightning bolt rendering**: Added support for the `kPictDefFlagRandomAnimation` (0x0004) flag from the old ClanLord client. Images with this flag (lightning effects) now pick a random animation frame each draw call instead of cycling deterministically, matching the erratic flickering behavior of the original client.
+
 ## v1.0.3
 
 ### New Features

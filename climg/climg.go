@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand/v2"
 	"os"
 	"sync"
 
@@ -64,10 +65,11 @@ const (
 	// kTypeClientItemOld4 'CIm4' from DatabaseTypes_cl.h
 	TYPE_CLIENT_ITEM = 0x43496d34
 
-	pictDefFlagTransparent = 0x8000
-	pictDefBlendMask       = 0x0003
-	pictDefCustomColors    = 0x2000
-	pictDefFlagNoChecksum  = 0x0400
+	pictDefFlagTransparent      = 0x8000
+	pictDefBlendMask            = 0x0003
+	pictDefCustomColors         = 0x2000
+	pictDefFlagNoChecksum       = 0x0400
+	pictDefFlagRandomAnimation  = 0x0004
 )
 
 func Load(path string) (*CLImages, error) {
@@ -746,6 +748,8 @@ func (c *CLImages) SetGammaCorrection(enabled bool, spriteGamma, monitorGamma fl
 
 // FrameIndex returns the picture frame for the given global animation counter.
 // If no animation is defined for the image, it returns 0.
+// Images with pictDefFlagRandomAnimation (e.g. lightning) pick a random frame
+// each call instead of cycling sequentially.
 func (c *CLImages) FrameIndex(id uint32, counter int) int {
 	if counter < 0 {
 		return 0
@@ -755,7 +759,12 @@ func (c *CLImages) FrameIndex(id uint32, counter int) int {
 		return 0
 	}
 	if ref.numAnims > 0 {
-		af := counter % int(ref.numAnims)
+		var af int
+		if ref.flags&pictDefFlagRandomAnimation != 0 {
+			af = rand.IntN(int(ref.numAnims))
+		} else {
+			af = counter % int(ref.numAnims)
+		}
 		pf := int(ref.animFrameTable[af])
 		if pf >= 0 && pf < int(ref.numFrames) {
 			return pf

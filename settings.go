@@ -187,6 +187,7 @@ var gsdef settings = settings{
 	ConsoleActionColor:    eui.NewColor(255, 80, 80, 255),
 	ConsoleCoinColor:      eui.NewColor(255, 215, 0, 255),
 	ConsoleClanColor:      eui.NewColor(180, 50, 50, 255),
+	SelectionColor:        eui.NewColor(80, 160, 255, 255),
 	WindowTitle:           "goThoom Client",
 	TimestampFormat:       "1/2/06 3:04:05pm",
 	LastUpdateCheck:       time.Time{},
@@ -367,6 +368,7 @@ type settings struct {
 	ConsoleActionColor    eui.Color
 	ConsoleCoinColor      eui.Color
 	ConsoleClanColor      eui.Color
+	SelectionColor        eui.Color
 	TimestampFormat       string
 	LastUpdateCheck       time.Time
 	NotifiedVersion       int
