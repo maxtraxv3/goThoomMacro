@@ -1,3 +1,18 @@
+### help me out with a small donation:
+<a href="https://www.paypal.com/donate/?hosted_button_id=DTZXJEBMM3DMG" target="_blank">
+  <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal" />
+</a>
+
+# Screen shots
+![Main UI](screenshotsforreadme/Screenshot_20260817_232555.png)
+![settings]()
+![]()
+![]()
+![]()
+![]()
+![]()
+
+
 # goThoom (Macro Fork)
 
 An alternate version of [goThoom](https://github.com/Distortions81/goThoom) by [Distortions81](https://github.com/Distortions81), an open-source client for the classic **[Clan Lord](https://www.deltatao.com/clanlord/)** MMORPG.
